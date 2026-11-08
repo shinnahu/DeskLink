@@ -4,7 +4,7 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 
 | part | file | size |
 |---|---|---|
-| Windows host (your PC) | `dist/DeskLinkHost.exe` | 644 KB (version 2.4), no install required to try |
+| Windows host (your PC) | `dist/DeskLinkHost.exe` | 645 KB (version 2.5), no install required to try |
 | Android app (your phone) | `dist/DeskLink.apk` | 185 KB (version 2.9.2) |
 
 On GitHub, both files are attached to each release (*Releases*, on the right of the repository page) rather than kept
@@ -279,7 +279,8 @@ To unlink a phone, open the tray icon on the PC → **Linked phones** → click 
 * The phone holds a 256‑bit secret, and the PC stores only its SHA‑256. The PC's key is DPAPI-encrypted.
 * From the internet, a connection must start with a knock made with a paired phone's secret. It is valid only within
   10 minutes of the PC's clock and only once, and anything else is dropped before the handshake. Ten failed tries
-  block that address for 10 minutes. New phones can only be paired on the home network.
+  block that address for 10 minutes. New phones can only be paired on the home network, and never from the router's
+  own address (some routers pass connections from the internet on to the PC under it).
 * Home means this PC's own network, or its own Tailscale: a 100.x address counts as home only when the connection
   comes in through this PC's Tailscale address. Some internet companies give their customers 100.x addresses too;
   those are treated as the internet, so they need the knock and can't pair.
@@ -357,6 +358,10 @@ Checked with 15 address cases (Tailscale ones with a stand-in address, since thi
 Version 2.9.2 (phone) draws the mode button's icon (mouse, hand or gamepad) at 20 dp: as solid shapes they looked
 bigger than the outline icons beside them. The phone pictures above come from a unit test that draws the app's real
 screens with Robolectric (only in the tests, not in the app), with nothing connecting anywhere.
+Version 2.5 (PC) refuses pairing from the router's own address. Some routers pass connections from the internet on to
+the PC under their own address, which counts as home; during the 10 minutes pairing is open, a stranger's request
+could have shown up on the PC (it still needed your click). Checked with 5 router cases and, over 127.0.0.1 with the
+test PC treating 127.0.0.1 as its router, a refused pairing request; pairing from home and every knock check still pass.
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del).
@@ -368,3 +373,13 @@ There is no audio streaming.
 * PC: `host\build.cmd` (Visual Studio 2022 C++). Details in [host/README.md](host/README.md).
 * Phone: `cd android && gradlew assembleRelease` (JDK 17+, Android SDK 35).
 * Wire protocol: [PROTOCOL.md](PROTOCOL.md).
+
+## License
+
+MIT: see [LICENSE](LICENSE).
+
+Credits:
+* The PlayStation-style button icons come from Kenney's [Input Prompts](https://kenney.nl/assets/input-prompts) pack,
+  CC0 (public domain).
+* Several of the app's icons (mouse, hand, gamepad, keyboard, menu, settings and others) are based on Google's
+  [Material Icons](https://github.com/google/material-design-icons), Apache License 2.0.

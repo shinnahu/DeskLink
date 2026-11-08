@@ -141,6 +141,7 @@ static int AppMain(int argc, wchar_t** argv) {
   g_opt.testPeersAreInternet = has(L"--peers-are-internet");
   g_opt.testNoInject = has(L"--no-inject");
   g_opt.testFakeScreens = _wtoi(val(L"--fake-screens").c_str());
+  g_opt.testRouterIsLoopback = has(L"--router-is-loopback");
   if (!val(L"--upnp-url").empty()) remote::SetTestLocation(W2U(val(L"--upnp-url")));
 #endif
 

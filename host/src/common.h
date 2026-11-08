@@ -56,6 +56,7 @@ struct RuntimeOptions {
   bool testPeersAreInternet = false;  // DESKLINK_TESTING: treat every connection as coming from the internet
   bool testNoInject = false;          // DESKLINK_TESTING: log input instead of injecting it
   int testFakeScreens = 0;            // DESKLINK_TESTING: the main screen also shown as this many more screens
+  bool testRouterIsLoopback = false;  // DESKLINK_TESTING: 127.0.0.1 counts as this PC's router
 };
 extern RuntimeOptions g_opt;
 

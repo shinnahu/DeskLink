@@ -302,7 +302,9 @@ void Server::HandleConnection(SOCKET s, std::string peer) {
         if (name.empty()) name = "Phone";
         if (name.size() > 60) name.resize(60);
         if (model.size() > 60) model.resize(60);
-        if (!local) {  // a new phone is only ever linked at home
+        // A new phone is only ever linked at home, and never from the router's own address: some routers hand
+        // connections from the internet on under it.
+        if (!local || remote::IsFromRouter(ip)) {
           Writer w(msg::PAIR_RESULT);
           w.u8(st::PAIRING_CLOSED).str("Link the phone at home, on the same Wi-Fi as " + g_app->hostName + ".");
           ch->Send(w.b);

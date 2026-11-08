@@ -43,6 +43,12 @@ bool IsHomeConnection(const std::string& peer, const std::string& ours, const st
 // This PC's IPv4 addresses on Tailscale's network adapter (none without Tailscale).
 std::vector<std::string> TailscaleAddresses();
 
+// Does this connection seem to come from the router itself (one of this PC's default gateways)? No phone pairs from
+// there, but some routers hand connections from the internet on under their own address: pairing from it is refused.
+bool IsFromRouter(const std::string& peer);
+bool IsFromRouter(const std::string& peer, const std::vector<std::string>& gateways);  // gateways given (self-test)
+std::vector<std::string> GatewayAddresses();
+
 // The PC's public IPv6 addresses that stay put (not the temporary privacy ones).
 std::vector<std::string> StableGlobalIpv6();
 

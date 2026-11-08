@@ -624,6 +624,47 @@ bool IsHomeConnection(const std::string& peer, const std::string& ours) {
   return IsHomeConnection(peer, ours, TailscaleAddresses());
 }
 
+std::vector<std::string> GatewayAddresses() {
+  std::vector<std::string> out;
+  ULONG size = 16 * 1024;
+  std::vector<uint8_t> buf(size);
+  auto* aa = (IP_ADAPTER_ADDRESSES*)buf.data();
+  ULONG flags = GAA_FLAG_INCLUDE_GATEWAYS | GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+  ULONG r = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, aa, &size);
+  if (r == ERROR_BUFFER_OVERFLOW) {
+    buf.resize(size);
+    aa = (IP_ADAPTER_ADDRESSES*)buf.data();
+    r = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, aa, &size);
+  }
+  if (r != NO_ERROR) return out;
+  for (auto* a = aa; a; a = a->Next) {
+    if (a->OperStatus != IfOperStatusUp) continue;
+    for (auto* g = a->FirstGatewayAddress; g; g = g->Next) {
+      char host[INET6_ADDRSTRLEN] = {};
+      sockaddr* sa = g->Address.lpSockaddr;
+      if (sa->sa_family == AF_INET) inet_ntop(AF_INET, &((sockaddr_in*)sa)->sin_addr, host, sizeof(host));
+      else if (sa->sa_family == AF_INET6) inet_ntop(AF_INET6, &((sockaddr_in6*)sa)->sin6_addr, host, sizeof(host));
+      if (host[0]) out.push_back(host);
+    }
+  }
+  return out;
+}
+
+bool IsFromRouter(const std::string& peer, const std::vector<std::string>& gateways) {
+  std::string p = PlainV4(peer);
+  for (auto& g : gateways)
+    if (!g.empty() && _stricmp(g.c_str(), p.c_str()) == 0) return true;
+  return false;
+}
+
+bool IsFromRouter(const std::string& peer) {
+  auto gateways = GatewayAddresses();
+#ifdef DESKLINK_TESTING
+  if (g_opt.testRouterIsLoopback) gateways.push_back("127.0.0.1");  // tests: this PC plays the router
+#endif
+  return IsFromRouter(peer, gateways);
+}
+
 std::vector<std::string> StableGlobalIpv6() {
   std::vector<std::string> stable, dhcp;
   ULONG size = 32 * 1024;

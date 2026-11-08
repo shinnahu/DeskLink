@@ -123,7 +123,8 @@ and stores `lastSeenOnline` locally so offline PCs can show "Offline · last see
    and continues on the same connection with `AUTH`.
 
 The host only accepts pairing while "pairing mode" is on (tray menu → *Pair a phone*, or automatically while no phone is paired),
-and only from local peers: from the internet `PAIR_REQUEST` gets `PAIR_RESULT` `PAIRING_CLOSED`.
+and only from local peers: from the internet `PAIR_REQUEST` gets `PAIR_RESULT` `PAIRING_CLOSED`. So does one from the
+host's own default gateway address (some routers pass connections from the internet on under it).
 
 ## 5. Messages
 

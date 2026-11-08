@@ -129,7 +129,7 @@ int RunHomeSelfTest() {
       {"127.0.0.1", "127.0.0.1", false, true, "this PC"},
       {"fd7a:115c:a1e0::5", "fd7a:115c:a1e0::9", false, true, "Tailscale's IPv6 (unique-local)"},
       {"8.8.8.8", "192.168.0.2", false, false, "a public IPv4 address"},
-      {"2001:db8:1::1", "2001:db8:2::2", false, false, "a public IPv6 address"},
+      {"2001:db8:1::1", "2001:db8:2::2", false, false, "a public IPv6 address (documentation range)"},
       {"100.128.0.1", "192.168.0.2", false, false, "100.128.x (outside 100.64/10)"},
       {"100.70.1.2", "192.168.0.2", false, false, "100.x through the router (internet company's CGNAT)"},
       {"100.70.1.2", "192.168.0.2", true, false, "the same while this PC also has Tailscale"},
@@ -147,8 +147,26 @@ int RunHomeSelfTest() {
     Log("hometest: %-5s %-8s %s (%s -> %s)", got == c.home ? "ok" : "FAIL", got ? "home" : "internet", c.what, c.peer,
         c.ours);
   }
+  // pairing is refused from the router's own address (some routers hand internet connections on under it)
+  struct RouterCase {
+    const char* peer;
+    bool router;
+    const char* what;
+  } routerCases[] = {
+      {"192.168.0.1", true, "the router itself"},
+      {"::ffff:192.168.0.1", true, "the router itself, on a dual-stack socket"},
+      {"fe80::1", true, "the router's IPv6 (link-local)"},
+      {"192.168.0.5", false, "a phone on the home Wi-Fi"},
+      {"192.168.0.10", false, "another device on the home Wi-Fi"},
+  };
+  std::vector<std::string> gateways = {"192.168.0.1", "fe80::1"};
+  for (auto& c : routerCases) {
+    bool got = remote::IsFromRouter(c.peer, gateways);
+    if (got != c.router) fails++;
+    Log("hometest: %-5s %-8s %s (%s)", got == c.router ? "ok" : "FAIL", got ? "router" : "device", c.what, c.peer);
+  }
   auto mine = remote::TailscaleAddresses();
-  Log("hometest: this PC's Tailscale addresses: %zu", mine.size());
+  Log("hometest: this PC's Tailscale addresses: %zu, its routers: %zu", mine.size(), remote::GatewayAddresses().size());
   Log("hometest: %s", fails ? "FAILED" : "all ok");
   return fails ? 1 : 0;
 }
