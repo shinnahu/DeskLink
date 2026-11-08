@@ -1,4 +1,4 @@
-# DeskLink — control your PC from your phone
+# DeskLink - control your PC from your phone
 
 A lightweight remote desktop made of two small programs, with no browser, no Chrome, and no cloud account:
 
