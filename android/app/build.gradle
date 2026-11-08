@@ -17,8 +17,8 @@ android {
         applicationId "com.desklink.app"
         minSdk 26
         targetSdk 35
-        versionCode 21
-        versionName "2.9.1"
+        versionCode 22
+        versionName "2.9.2"
     }
 
     signingConfigs {
@@ -53,6 +53,17 @@ android {
         abortOnError false
     }
 
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            all {
+                // PreviewShots draws the README's phone pictures, only when asked: -Ppreviews=<folder>
+                it.systemProperty 'desklink.previews', (project.findProperty('previews') ?: '')
+                it.maxHeapSize = '2g'
+            }
+        }
+    }
+
     dependenciesInfo {
         includeInApk false
         includeInBundle false
@@ -61,4 +72,7 @@ android {
 
 dependencies {
     implementation project(':core')
+    // tests only (not in the app): Robolectric runs Android's drawing code on the PC for the screen pictures
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.17'
 }

@@ -1,6 +1,6 @@
 # DeskLink — Android client
 
-Plain Java, framework APIs only (no AndroidX, no libraries). Release APK ≈ 100 KB.
+Plain Java, framework APIs only (no AndroidX, no libraries). Release APK ≈ 185 KB.
 
 ```
 android/
@@ -23,6 +23,19 @@ storePassword=…
 keyAlias=desklink
 keyPassword=…
 ```
+
+## Screen pictures (the README's previews)
+
+`app/src/test/.../PreviewShots.java` draws the app's real screens with Robolectric (a test-only dependency; the app
+itself has no AndroidX or libraries) and saves them as PNGs. Nothing connects anywhere, and the PC is a stand-in:
+put stand-in pictures of its screen (`desk-one.png` 1920×1080, `desk-all.png` 3840×1200, `game.png` 1920×1080) in
+`<folder>/in` (`python docs/standins.py <folder>/in` draws them; it needs Pillow and Windows' Segoe UI font), then:
+
+```bash
+./gradlew :app:testDebugUnitTest --tests com.desklink.app.PreviewShots -Ppreviews=<folder>
+```
+
+Without `-Ppreviews` the test is skipped.
 
 ## Desktop CLI (integration tests against the host)
 

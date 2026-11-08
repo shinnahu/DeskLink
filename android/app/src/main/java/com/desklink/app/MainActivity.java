@@ -435,7 +435,7 @@ public final class MainActivity extends Activity {
 
     private void probeAll() {
         final List<PairedHost> hosts = store.all();
-        if (hosts.isEmpty()) return;
+        if (hosts.isEmpty() || RemoteSession.offline) return;
         for (final PairedHost h : hosts) {
             if (!statuses.containsKey(h.hostId)) {
                 statuses.put(h.hostId, new Status());

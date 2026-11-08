@@ -516,6 +516,8 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         // One mode button: tap = trackpad → direct touch → Gaming mode → trackpad; touch and hold = every mode,
         // with each gaming profile
         btnMode = addToolButton(R.drawable.ic_mouse, R.string.tb_mode, v -> cycleMode());
+        // the mouse, hand and gamepad are solid shapes: at 20 dp they look as big as the outline icons beside them
+        btnMode.setPadding(Ui.dp(this, 12), Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 14));
         btnMode.setOnLongClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
             showModeMenu(v);

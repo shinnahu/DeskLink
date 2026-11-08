@@ -84,8 +84,11 @@ final class RemoteSession {
 
     boolean everConnected() { return everConnected; }
 
+    /** The README's screen pictures (PreviewShots, a unit test): no connections and no searching for PCs. */
+    static boolean offline;
+
     void start() {
-        if (started) return;
+        if (started || offline) return;
         started = true;
         stopped = false;
         connectNow();

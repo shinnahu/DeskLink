@@ -5,12 +5,27 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 | part | file | size |
 |---|---|---|
 | Windows host (your PC) | `dist/DeskLinkHost.exe` | 644 KB (version 2.4), no install required to try |
-| Android app (your phone) | `dist/DeskLink.apk` | 185 KB (version 2.9.1) |
+| Android app (your phone) | `dist/DeskLink.apk` | 185 KB (version 2.9.2) |
 
 On GitHub, both files are attached to each release (*Releases*, on the right of the repository page) rather than kept
 in the code.
 
 ## Preview
+
+On the phone. The app's own code drew these pictures (on a PC, with Robolectric); the PC's screen in them is a
+stand-in.
+
+| Your PCs | Connected | The ⋮ menu |
+|---|---|---|
+| <img src="docs/phone-pcs.png" alt="The list of PCs, with OFFICE-PC online" width="240"> | <img src="docs/phone-session.png" alt="Connected: the PC's screen with the pointer, the top bar and the shortcut bar" width="240"> | <img src="docs/phone-menu.png" alt="The ⋮ menu: send and get files, screen, Ctrl+Alt+Del, lock, Task Manager, Settings, Disconnect" width="240"> |
+
+| All screens at once | Gaming mode |
+|---|---|
+| <img src="docs/phone-all-screens.png" alt="Two screens side by side, as Windows arranges them" width="400"> | <img src="docs/phone-gaming.png" alt="The on-screen gamepad over a game" width="400"> |
+
+| A gaming profile's buttons | Settings: Gaming mode |
+|---|---|
+| <img src="docs/phone-bindings.png" alt="The binding editor: what each button does on the PC" width="240"> | <img src="docs/phone-settings-gaming.png" alt="The Gaming mode settings" width="240"> |
 
 Linking a phone, on the PC: DeskLink waits for the phone, shows the code to compare, and the phone is linked.
 
@@ -339,6 +354,9 @@ address. Until then any 100.x address did, and some internet companies give thei
 those connections need the knock like any other from the internet, and the PC doesn't answer their search for PCs.
 Checked with 15 address cases (Tailscale ones with a stand-in address, since this PC has no Tailscale) and, over
 127.0.0.1, pairing and sessions from home plus every knock check from the internet.
+Version 2.9.2 (phone) draws the mode button's icon (mouse, hand or gamepad) at 20 dp: as solid shapes they looked
+bigger than the outline icons beside them. The phone pictures above come from a unit test that draws the app's real
+screens with Robolectric (only in the tests, not in the app), with nothing connecting anywhere.
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del).
