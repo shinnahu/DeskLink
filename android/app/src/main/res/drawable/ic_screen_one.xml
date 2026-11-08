@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One screen (drawn like the screens in ic_screens_all / ic_screen_next) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M4,4h16v11H4zM6,6v7h12V6zM11,15h2v2h-2zM8,17h8v2H8z" />
+</vector>

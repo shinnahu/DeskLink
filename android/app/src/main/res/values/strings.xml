@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">DeskLink</string>
+    <string name="send_to_pc">Send to PC</string>
+
+    <!-- Common -->
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="save">Save</string>
+    <string name="retry">Retry</string>
+    <string name="reconnect">Reconnect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="open">Open</string>
+    <string name="refresh">Refresh</string>
+    <string name="port">Port</string>
+    <string name="just_now">just now</string>
+
+    <!-- Main list -->
+    <string name="main_subtitle">Your computers</string>
+    <string name="add_pc">Add PC</string>
+    <string name="empty_title">No PCs linked yet</string>
+    <string name="empty_body">Install DeskLink Host on your Windows PC, then tap “Add PC” while this phone is on the same Wi-Fi.</string>
+    <string name="tip_remote">Away from home, DeskLink reaches your PC over mobile data when the PC\'s router allows it. The DeskLink menu on the PC (tray icon) says whether it does.</string>
+    <string name="remote_ready">Mobile data: ready. You can use this PC away from home too.</string>
+    <string name="remote_off">Mobile data is turned off on this PC (DeskLink\'s tray menu on the PC).</string>
+    <string name="remote_maybe_v6">Away from home this PC can only work over IPv6, and only if its router lets those connections in.</string>
+    <string name="remote_shared">Mobile data can\'t reach this PC: its internet company shares one address between many homes (CGNAT).</string>
+    <string name="remote_no_upnp">Mobile data can\'t reach this PC yet: its router didn\'t let DeskLink open the way in (UPnP is off or not supported).</string>
+    <string name="status_checking">Checking…</string>
+    <string name="status_online">Online</string>
+    <string name="status_in_use">Online · in use by %1$s</string>
+    <string name="status_in_use_unknown">Online · in use</string>
+    <string name="status_locked">Locked</string>
+    <string name="status_locked_in_use">Locked · in use by %1$s</string>
+    <string name="status_offline_seen">Offline · last seen %1$s</string>
+    <string name="status_never">Never connected</string>
+    <string name="status_unlinked">Not linked anymore — tap to pair again</string>
+    <string name="status_identity">Security warning: PC identity changed</string>
+    <string name="rename">Rename</string>
+    <string name="rename_title">Rename PC</string>
+    <string name="forget">Forget</string>
+    <string name="forget_title">Forget %1$s?</string>
+    <string name="forget_body">This phone will stop connecting to this PC. You can also remove the phone from the PC in DeskLink Host.</string>
+    <string name="edit_addresses">Edit addresses</string>
+    <string name="addresses_hint">One address per line (LAN IP, Tailscale IP or PC name)</string>
+
+    <!-- Add PC / pairing -->
+    <string name="add_title">Add a PC</string>
+    <string name="add_steps">1. On the PC, open DeskLink Host and choose “Pair a phone”.\n2. Pick the PC below.\n3. Check that both screens show the same code, then click Allow on the PC.</string>
+    <string name="add_nearby">PCs on this Wi-Fi</string>
+    <string name="add_scanning">Searching…</string>
+    <string name="add_none_found">No PCs found yet. Make sure DeskLink Host is running and this phone is on the same Wi-Fi.</string>
+    <string name="add_manual">Or enter the PC address</string>
+    <string name="add_manual_hint">IP address or name, e.g. 192.168.0.10</string>
+    <string name="add_connect">Connect</string>
+    <string name="badge_pairing_open">Ready to pair</string>
+    <string name="badge_pairing_closed">Pairing off</string>
+    <string name="badge_linked">Already linked</string>
+    <string name="pair_connecting">Connecting to %1$s…</string>
+    <string name="pair_confirm_title">Confirm this code on your PC</string>
+    <string name="pair_waiting">Waiting for you to click Allow on the PC…</string>
+    <string name="pair_success">Linked with %1$s</string>
+    <string name="pair_err_closed">Pairing is not turned on for this PC. On the PC, open DeskLink Host and choose “Pair a phone”, then try again.</string>
+    <string name="pair_err_denied">The PC did not allow this phone.</string>
+    <string name="pair_err_timeout">Nobody answered on the PC in time.</string>
+    <string name="pair_err_rate">Too many attempts. Wait a minute and try again.</string>
+    <string name="pair_err_version">This PC runs a different DeskLink version. Update both apps.</string>
+    <string name="pair_err_network">Could not reach the PC (%1$s).</string>
+    <string name="pair_err_generic">Pairing failed: %1$s</string>
+
+    <!-- Session -->
+    <string name="conn_connecting">Connecting to %1$s…</string>
+    <string name="conn_waiting_video">Waiting for the screen…</string>
+    <string name="conn_lost">Connection lost</string>
+    <string name="conn_reconnecting">Reconnecting… (attempt %1$d)</string>
+    <string name="conn_reconnecting_simple">Reconnecting…</string>
+    <string name="conn_weak">Weak connection…</string>
+    <string name="conn_unreachable">Can\'t reach %1$s</string>
+    <string name="conn_unreachable_hint">Make sure the PC is on and DeskLink Host is running. Away from home it works over mobile data if the PC\'s router allows it (the DeskLink menu on the PC says). Still retrying…</string>
+    <string name="conn_unreachable_mobile">Make sure the PC is on and DeskLink Host is running.\n\n%1$s\n\nStill retrying…</string>
+    <string name="away_unknown">This phone doesn\'t know yet how to reach the PC over mobile data. Connect to it once at home over Wi-Fi, then try again.</string>
+    <string name="away_off">Mobile data access is turned off on the PC: turn on \"Allow access over mobile data\" in DeskLink\'s menu on the PC (icon next to the clock).</string>
+    <string name="away_no_upnp">The PC\'s router doesn\'t let DeskLink open the way in. Turn on UPnP in the router\'s settings, then on the PC turn \"Allow access over mobile data\" off and on again (DeskLink menu, next to the clock).</string>
+    <string name="away_shared">The PC\'s internet company shares one address between many homes (CGNAT), so mobile data can\'t reach it. You can ask them for a public IP address.</string>
+    <string name="away_v6_hint">It may still work over IPv6 if the router lets incoming IPv6 connections in (look for the IPv6 firewall in its settings).</string>
+    <string name="away_no_ipv6">From outside, the PC can only be reached over IPv6, and this phone\'s mobile data has no IPv6 right now.</string>
+    <string name="away_try_upnp">Turning on UPnP in the PC\'s router would fix it.</string>
+    <string name="away_ready">The PC said it can be reached over mobile data. It may be asleep or off, or your home\'s internet address changed: connect once at home over Wi-Fi to update it.</string>
+    <string name="conn_ended_pc">Sharing was stopped on the PC</string>
+    <string name="conn_ended_replaced">This PC was opened from another connection</string>
+    <string name="conn_ended_host_exit">DeskLink Host was closed on the PC</string>
+    <string name="conn_disconnected">Disconnected</string>
+    <string name="conn_busy">Another device is controlling this PC right now.</string>
+    <string name="conn_unlinked">This phone is no longer linked to %1$s. Forget the PC and pair it again.</string>
+    <string name="conn_identity">Security warning: the identity of %1$s changed. If you reinstalled DeskLink Host, forget the PC and pair it again.</string>
+    <string name="conn_version">This PC runs a different DeskLink version. Update both apps.</string>
+    <string name="conn_secure">The PC is locked or showing an administrator prompt</string>
+    <string name="conn_secure_hint">Control resumes automatically when the normal desktop is back.</string>
+    <string name="conn_paused_bg">Paused while in the background</string>
+    <string name="disconnect_confirm">Disconnect from %1$s?</string>
+
+    <string name="menu_full_screen">Full screen</string>
+    <string name="touch_trackpad">Trackpad</string>
+    <string name="touch_direct">Direct touch</string>
+    <string name="mode_switched_trackpad">Trackpad mode</string>
+    <string name="mode_switched_direct">Direct touch mode</string>
+    <string name="menu_quality">Quality</string>
+    <string name="quality_auto">Auto</string>
+    <string name="quality_high">High (Wi-Fi)</string>
+    <string name="quality_balanced">Balanced</string>
+    <string name="quality_saver">Data saver</string>
+    <string name="menu_monitor">Screen</string>
+    <string name="monitor_n">Screen %1$d</string>
+    <string name="menu_cad">Send Ctrl+Alt+Del</string>
+    <string name="menu_lock">Lock PC</string>
+    <string name="menu_task_manager">Task Manager</string>
+    <string name="menu_clipboard">Sync clipboard</string>
+    <string name="menu_invert_scroll">Invert scrolling</string>
+    <string name="menu_predictive">Predictive text</string>
+    <string name="menu_stats">Show stats</string>
+    <string name="menu_help">Gestures</string>
+    <string name="help_text">Trackpad mode\n• Drag one finger: move the pointer\n• Let go while moving: the pointer glides on (touch to stop it)\n• Tap: click · Double tap: double-click\n• Tap with two fingers: right-click\n• Tap with three fingers: middle-click\n• Swipe with two fingers: scroll (let go while moving and it keeps scrolling; touch to stop it)\n• Touch and hold, then drag: drag (or double-tap and drag). A ring at the pointer shows when the hold takes. To go further, put another finger down and lift the first\n• Pinch: zoom\n• Swipe up / down with three fingers: show / hide the keyboard\n\nDirect touch mode\n• Tap: click where you touch\n• Touch and hold: right-click\n• Drag one finger: drag\n• Two fingers: scroll · Pinch: zoom\n\nShortcut bar (above the keyboard)\n• Edit, Ctrl Alt, Esc Tab, ← ↑ ↓ →: tap to show those keys, tap again to hide them\n• Ctrl, Shift, Alt: tap = stays pressed until you tap it again; touch and hold = pressed while held (Settings → Keyboard can make them work only while held)\n• Win: a tap is a press (it opens Start); touch and hold = pressed while held (Win + a key)\n\nButtons at the bottom right\n• Keyboard: show / hide the phone keyboard\n• Shortcut keys: keep the shortcut bar on screen (tap again to hide it)\n\nTop bar\n• It stays until you hide it with ˄; the ˅ at the top brings it back\n• The mode button switches trackpad → direct touch → Gaming mode; touch and hold it to pick one, or a gaming profile\n• With more than one screen on the PC: the two-screens button shows them all at once (pinch to look closer; tap it again for one screen), the screen-with-an-arrow button goes to the next one\n• ⋮: send files to the PC or get one from it, pick a screen, Ctrl+Alt+Del, lock the PC, Task Manager\n\nGaming mode\n• An on-screen gamepad: holding a button holds its key or mouse button on the PC\n• The stick (DualShock) steers smoothly; Settings → Pad type → Digital gives the D-pad instead\n• Drag between the buttons to move the pointer; in a game that hides the pointer, it turns the camera\n• Each profile has its own name and buttons: Settings → Profiles…\n\nSettings (⋮ → Settings): pointer speed, keyboard, Gaming mode, picture, clipboard</string>
+
+    <string name="tb_keyboard">Keyboard</string>
+    <string name="tb_keyboard_hide">Hide keyboard</string>
+    <string name="bar_pin">Keep the shortcut bar on screen</string>
+    <string name="bar_unpin">Hide the shortcut bar</string>
+    <string name="bar_pinned">Shortcut bar stays on screen</string>
+    <string name="bar_unpinned">Shortcut bar shows only with the keyboard</string>
+
+    <string name="pointer_speed">Pointer speed</string>
+    <string name="pointer_speed_value" translatable="false">%1$d / %2$d</string>
+    <string name="pointer_speed_slower">Slower</string>
+    <string name="pointer_speed_faster">Faster</string>
+    <string name="tb_mode">Touch mode</string>
+    <string name="tb_send">Send files to PC</string>
+    <string name="tb_get">Get file from PC</string>
+    <string name="tb_menu">More</string>
+    <string name="tb_show">Show toolbar</string>
+    <string name="tb_screens_all">All screens</string>
+    <string name="tb_screen_next">Next screen</string>
+    <string name="tb_screen_one">One screen</string>
+    <string name="screen_n_of">Screen %1$d of %2$d</string>
+
+    <string name="key_ctrl" translatable="false">Ctrl</string>
+    <string name="key_shift" translatable="false">Shift</string>
+    <string name="key_alt" translatable="false">Alt</string>
+    <string name="key_win" translatable="false">Win</string>
+    <string name="key_esc" translatable="false">Esc</string>
+    <string name="key_tab" translatable="false">Tab</string>
+    <string name="key_del">Del</string>
+    <string name="key_home">Home</string>
+    <string name="key_end">End</string>
+    <string name="cd_undo">Undo (Ctrl+Z)</string>
+    <string name="cd_redo">Redo (Ctrl+Shift+Z)</string>
+    <string name="cd_cut">Cut (Ctrl+X)</string>
+    <string name="cd_copy">Copy (Ctrl+C)</string>
+    <string name="cd_paste">Paste (Ctrl+V)</string>
+    <string name="group_edit">Edit</string>
+    <string name="group_mods" translatable="false">Ctrl Alt</string>
+    <string name="group_keys" translatable="false">Esc Tab</string>
+    <string name="cd_group_edit">Undo, redo, cut, copy, paste</string>
+    <string name="cd_group_mods" translatable="false">Ctrl, Shift, Alt, Win</string>
+    <string name="cd_group_keys">Esc, Tab, Del, Home, End</string>
+    <string name="cd_group_arrows">Arrow keys</string>
+
+    <!-- Fingerprint lock -->
+    <string name="menu_app_lock">Lock with fingerprint</string>
+    <string name="lock_title">DeskLink is locked</string>
+    <string name="lock_unlock">Unlock</string>
+    <string name="lock_prompt_title">Unlock DeskLink</string>
+    <string name="lock_need_screen_lock">Set up a screen lock on this phone first (fingerprint, PIN or pattern).</string>
+    <string name="lock_on">From now on DeskLink asks for your fingerprint when you open it.</string>
+
+    <!-- Gaming mode -->
+    <string name="mode_gaming_profile">Gaming mode · %1$s</string>
+    <string name="gp_on">Gaming mode · %1$s. Touch and hold the mode button at the top to pick another profile.</string>
+    <string name="tb_hide">Hide this bar</string>
+    <string name="gp_edit_profiles">Edit profiles…</string>
+    <string name="gp_profiles">Gaming profiles</string>
+    <string name="gp_new_profile">New profile</string>
+    <string name="gp_new_name">Profile %1$d</string>
+    <string name="gp_new_from">Starts as a copy of %1$s.</string>
+    <string name="gp_default_profile">Default</string>
+    <string name="gp_delete">Delete</string>
+    <string name="gp_delete_title">Delete %1$s?</string>
+    <string name="gp_last_profile">Keep at least one profile.</string>
+    <string name="gp_none">Nothing</string>
+    <string name="gp_mouse_left">Left click</string>
+    <string name="gp_mouse_right">Right click</string>
+    <string name="gp_mouse_middle">Middle click</string>
+    <string name="gp_mouse_4">Mouse button 4</string>
+    <string name="gp_mouse_5">Mouse button 5</string>
+    <string name="gp_key_space">Space</string>
+    <string name="gp_key_backspace">Backspace</string>
+    <string name="gp_key_pgup">Page Up</string>
+    <string name="gp_key_pgdn">Page Down</string>
+    <string name="gp_key_caps">Caps Lock</string>
+    <string name="gp_up">↑ Up</string>
+    <string name="gp_down">↓ Down</string>
+    <string name="gp_left">← Left</string>
+    <string name="gp_right">→ Right</string>
+    <string name="gp_triangle">△ Triangle</string>
+    <string name="gp_circle">○ Circle</string>
+    <string name="gp_cross">✕ Cross</string>
+    <string name="gp_square">□ Square</string>
+    <string name="gp_select" translatable="false">▭ Select</string>
+    <string name="gp_start" translatable="false">▷ Start</string>
+
+    <string name="files_sending">Sending %1$s… %2$d%%</string>
+    <string name="files_sent">Saved on the PC: %1$s</string>
+    <string name="files_send_failed">Could not send %1$s: %2$s</string>
+    <string name="files_receiving">Receiving %1$s… %2$d%%</string>
+    <string name="files_received">Saved to Downloads/DeskLink: %1$s</string>
+    <string name="files_received_app">Saved to %1$s</string>
+    <string name="files_receive_failed">Could not receive %1$s</string>
+    <string name="files_pick_on_pc">Choose the file on the PC screen…</string>
+    <string name="files_none_chosen">No file was chosen on the PC</string>
+    <string name="files_not_connected">Not connected</string>
+
+    <string name="stats_fmt" translatable="false">%1$d fps · %2$s Mbps · %3$d ms · %4$d×%5$d</string>
+
+    <!-- Share -->
+    <string name="share_choose_pc">Send to which PC?</string>
+    <string name="share_no_pcs">No PCs linked yet. Open DeskLink to add your PC first.</string>
+    <string name="share_open_app">Open DeskLink</string>
+    <string name="share_connecting">Connecting to %1$s…</string>
+    <string name="share_sending">Sending %1$d of %2$d: %3$s</string>
+    <string name="share_done">Sent to %1$s ✓</string>
+    <string name="share_text_done">Copied to the PC clipboard ✓</string>
+    <string name="share_failed">Could not send: %1$s</string>
+    <string name="share_nothing">Nothing to send</string>
+
+    <!-- Settings page (2.2) -->
+    <string name="settings">Settings</string>
+    <string name="back">Back</string>
+    <string name="set_pointer">Pointer</string>
+    <string name="set_pointer_speed_sum">How far the pointer goes when you slide your finger, in trackpad mode.</string>
+    <string name="set_invert_sum">Two-finger scrolling goes the other way.</string>
+    <string name="set_keyboard">Keyboard</string>
+    <string name="set_predictive_sum">Word suggestions, autocorrect and swipe typing.</string>
+    <string name="set_gaming">Gaming mode</string>
+    <string name="set_labels">Names on the controls (what each one does)</string>
+    <string name="set_labels_always">Always</string>
+    <string name="set_labels_start">For 5 seconds when Gaming mode starts</string>
+    <string name="set_labels_off">Off</string>
+    <string name="set_colors">Colored buttons</string>
+    <string name="set_colors_sum">in color instead of white</string>
+    <string name="set_profiles">Profiles…</string>
+    <string name="set_profiles_sum">Each game\'s name and buttons</string>
+    <string name="set_picture">Picture</string>
+    <string name="set_quality_sum">Auto uses less data on mobile data.</string>
+    <string name="set_full_screen_sum">Hides Android\'s status and navigation bars during a session.</string>
+    <string name="set_stats_sum">Frames per second, data and ping over the picture.</string>
+    <string name="set_clipboard">Clipboard</string>
+    <string name="set_clipboard_sum">Copy on one side, paste on the other.</string>
+    <string name="set_security">Security</string>
+    <string name="set_app_lock_sum">Asks for your fingerprint (or the phone\'s PIN) when DeskLink opens, and again after 30 s away.</string>
+    <string name="set_help">Help</string>
+    <string name="set_gestures_sum">Gestures, modes and buttons</string>
+    <string name="set_version" translatable="false">DeskLink %1$s</string>
+    <string name="set_pad_type">Pad type</string>
+    <string name="set_pad_dualshock">DualShock (analog stick)</string>
+    <string name="set_pad_digital">Digital (D-pad only)</string>
+    <string name="set_camera_speed">Camera speed</string>
+    <string name="set_camera_speed_sum">In a game that hides the pointer, sliding a finger on the picture turns the camera. Needs DeskLink 2.1 on the PC.</string>
+    <string name="in_use">In use</string>
+    <string name="gp_edit">Edit %1$s</string>
+    <string name="gp_profiles_hint">Tap a profile to use it, or ✎ to change its buttons.</string>
+    <string name="gp_controls_hint">Tap a control to choose what it does on the PC.</string>
+    <string name="gp_group_move">Stick and D-pad</string>
+    <string name="gp_group_buttons">Buttons</string>
+    <string name="gp_group_shoulders">Shoulder buttons</string>
+    <string name="gp_group_middle">Middle</string>
+    <string name="gp_pick_sub">What it does on the PC</string>
+    <string name="gp_keys_mouse">Mouse</string>
+    <string name="gp_keys_common">Keys</string>
+    <string name="gp_keys_arrows">Arrows</string>
+    <string name="gp_keys_letters">Letters</string>
+    <string name="gp_keys_numbers">Numbers</string>
+    <string name="gp_keys_f">Function keys</string>
+    <string name="gp_keys_more">More</string>
+    <string name="gp_delete_body">Its buttons are lost. This can\'t be undone.</string>
+    <string name="set_mods">Ctrl, Shift and Alt</string>
+    <string name="set_mods_sum">On the shortcut bar. Win never stays pressed: a tap opens Start, and holding it works with another key.</string>
+    <string name="set_mods_toggle">A tap keeps it pressed until you tap it again</string>
+    <string name="set_mods_hold">Pressed only while you hold it</string>
+    <string name="reset_default">Default</string>
+    <string name="set_value_default">%1$s · default</string>
+    <string name="set_glide">Glide</string>
+    <string name="set_glide_sum">How far the pointer carries on when you let go while moving (trackpad mode). Off: it stops where you lift.</string>
+    <string name="set_less">Less</string>
+    <string name="set_more">More</string>
+    <string name="set_lines">Line thickness</string>
+    <string name="set_lines_sum">The buttons\' outlines and letters, the stick\'s ring, and the names on them.</string>
+    <string name="set_thinner">Thinner</string>
+    <string name="set_as_drawn">As drawn</string>
+    <string name="set_opacity">Opacity</string>
+    <string name="set_opacity_sum">How much of the picture shows through the gamepad.</string>
+    <string name="set_see_through">See-through</string>
+    <string name="set_solid">Solid</string>
+    <string name="set_stick_look">Stick look (DualShock)</string>
+    <string name="set_stick_full">Ring, arrows and ball</string>
+    <string name="set_stick_ring">Ring and ball</string>
+    <string name="set_stick_ball">Ball only</string>
+    <string name="set_arrow_color">Arrow color</string>
+    <string name="set_arrow_color_sum">The stick\'s arrows, and the D-pad\'s arms while held.</string>
+    <string name="set_color_n">Color %1$d</string>
+    <string name="set_percent" translatable="false">%1$d %%</string>
+</resources>

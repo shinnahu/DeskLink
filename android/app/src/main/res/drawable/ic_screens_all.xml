@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- All screens: a screen in front of another. As tall as the screen in ic_screen_next / ic_screen_one (4..19), about
+     as wide; the one behind drawn a little lighter -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3.5,4h14v1.6H5.1v7.4H3.5z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6.5,7h14v8h-14zM8.5,9v4h10v-4zM12.5,15h2v2h-2zM9.5,17h8v2h-8z" />
+</vector>

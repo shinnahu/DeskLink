@@ -1,0 +1,8 @@
+# build output (build.cmd / gradlew make it again)
+host/build/
+*.log
+
+# the ready-made APK and EXE are attached to each GitHub release instead
+dist/
+
+# the Android signing key and its password stay on this PC (see android/.gitignore)

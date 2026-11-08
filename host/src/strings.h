@@ -1,0 +1,54 @@
+#pragma once
+#include <string>
+
+// UI strings: English + Spanish (picked from the Windows display language).
+enum StrId {
+  S_SHARED_WITH,
+  S_STOP,
+  S_STATUS_READY,
+  S_STATUS_CONNECTED,
+  S_STATUS_PAIRING,
+  S_MENU_PAIR,
+  S_MENU_PAIRED,
+  S_MENU_NONE,
+  S_MENU_REMOVE_Q,
+  S_MENU_SENDFILE,
+  S_MENU_DISCONNECT,
+  S_MENU_OPENFILES,
+  S_MENU_STARTUP,
+  S_MENU_INSTALL,
+  S_MENU_EXIT,
+  S_PAIR_WINDOW,
+  S_PAIR_TITLE,
+  S_PAIR_STEPS,
+  S_PAIR_WAITING,
+  S_PAIR_CLOSED,
+  S_PAIR_REQ_TITLE,
+  S_PAIR_REQ_BODY,
+  S_PAIR_REQ_MODEL,
+  S_ALLOW,
+  S_DENY,
+  S_CLOSE,
+  S_REOPEN,
+  S_PAIR_DONE_TITLE,
+  S_PAIR_DONE_BODY,
+  S_PAIR_FAIL_TITLE,
+  S_PAIR_FAIL_BODY,
+  S_PAIR_CONFIRMING,
+  S_FILE_RECEIVED,
+  S_THIS_PC,
+  S_INSTALL_HINT,
+  S_INSTALL_BUTTON,
+  S_INSTALLED_OK,
+  S_MENU_REMOTE,
+  S_REMOTE_OFF,
+  S_REMOTE_CHECKING,
+  S_REMOTE_READY,
+  S_REMOTE_MAYBE_V6,
+  S_REMOTE_SHARED,
+  S_REMOTE_NO_UPNP,
+  S_COUNT
+};
+
+const wchar_t* S(StrId id);
+std::wstring Fmt(StrId id, const std::wstring& a);
