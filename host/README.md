@@ -1,6 +1,6 @@
 # DeskLink Host (Windows)
 
-Native C++ (Win32 + Direct3D 11 + Media Foundation + CNG). One 640 KB `.exe`, no runtime to install.
+Native C++ (Win32 + Direct3D 11 + Media Foundation + CNG). One 644 KB `.exe`, no runtime to install.
 
 ## Pipeline
 
@@ -52,6 +52,7 @@ DeskLinkHostTest.exe --data %TEMP%\dl --test-capture 5 out.h264      :: capture+
 DeskLinkHostTest.exe --data %TEMP%\dl --test-capture 5 out.h264 1920 1920 30 0 all   :: all screens in one picture
 :: with one screen: --fake-screens 3 shows it again as 3 pretend screens (as it is, upside down, turned 90°)
 DeskLinkHostTest.exe --data %TEMP%\dl --test-input                   :: injection checked by swallowing hooks
+DeskLinkHostTest.exe --data %TEMP%\dl --test-home                    :: which addresses count as home (15 cases)
 DeskLinkHostTest.exe --data %TEMP%\dl --test-render-ui %TEMP%\png    :: pairing window PNGs
 DeskLinkHostTest.exe --data %TEMP%\dl --bind 127.0.0.1 --port 47910 --no-ui --auto-approve
 node tools\testclient.mjs 127.0.0.1 47910 %TEMP%\work                :: 17 end-to-end protocol checks

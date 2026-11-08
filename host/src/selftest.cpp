@@ -109,6 +109,50 @@ int RunCaptureSelfTest(int seconds, const std::wstring& out, int maxW, int maxH,
   return sink.frames > 0 ? 0 : 1;
 }
 
+// ---------------------------------------------------------------- home or internet
+// Which connections count as home (no knock; pairing allowed) and which as the internet. 100.64/10 is home only when
+// it came in through this PC's own Tailscale address.
+#include "remote.h"
+
+int RunHomeSelfTest() {
+  struct Case {
+    const char* peer;
+    const char* ours;
+    bool tailscale;  // this PC has Tailscale at 100.101.102.103
+    bool home;
+    const char* what;
+  } cases[] = {
+      {"192.168.0.5", "192.168.0.2", false, true, "phone on the home Wi-Fi"},
+      {"::ffff:192.168.0.5", "::ffff:192.168.0.2", false, true, "the same, on a dual-stack socket"},
+      {"10.1.2.3", "10.1.2.9", false, true, "another private network range"},
+      {"169.254.10.20", "169.254.1.1", false, true, "link-local"},
+      {"127.0.0.1", "127.0.0.1", false, true, "this PC"},
+      {"fd7a:115c:a1e0::5", "fd7a:115c:a1e0::9", false, true, "Tailscale's IPv6 (unique-local)"},
+      {"8.8.8.8", "192.168.0.2", false, false, "a public IPv4 address"},
+      {"2001:db8:1::1", "2001:db8:2::2", false, false, "a public IPv6 address"},
+      {"100.128.0.1", "192.168.0.2", false, false, "100.128.x (outside 100.64/10)"},
+      {"100.70.1.2", "192.168.0.2", false, false, "100.x through the router (internet company's CGNAT)"},
+      {"100.70.1.2", "192.168.0.2", true, false, "the same while this PC also has Tailscale"},
+      {"100.70.1.2", "100.101.102.103", true, true, "100.x through this PC's Tailscale"},
+      {"::ffff:100.70.1.2", "::ffff:100.101.102.103", true, true, "the same, on a dual-stack socket"},
+      {"100.70.1.2", "100.101.102.103", false, false, "100.x to a 100.x address that isn't Tailscale's"},
+      {"100.70.1.2", "", true, false, "100.x with this PC's end unknown (LAN discovery)"},
+  };
+  int fails = 0;
+  for (auto& c : cases) {
+    std::vector<std::string> ts;
+    if (c.tailscale) ts.push_back("100.101.102.103");
+    bool got = remote::IsHomeConnection(c.peer, c.ours, ts);
+    if (got != c.home) fails++;
+    Log("hometest: %-5s %-8s %s (%s -> %s)", got == c.home ? "ok" : "FAIL", got ? "home" : "internet", c.what, c.peer,
+        c.ours);
+  }
+  auto mine = remote::TailscaleAddresses();
+  Log("hometest: this PC's Tailscale addresses: %zu", mine.size());
+  Log("hometest: %s", fails ? "FAILED" : "all ok");
+  return fails ? 1 : 0;
+}
+
 // ---------------------------------------------------------------- input self-test
 // Injects tagged events and verifies them with low-level hooks that SWALLOW only our tagged
 // events, so nothing reaches the real desktop (the user's own mouse/keyboard pass through).

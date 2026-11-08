@@ -4,11 +4,19 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 
 | part | file | size |
 |---|---|---|
-| Windows host (your PC) | `dist/DeskLinkHost.exe` | 640 KB (version 2.3), no install required to try |
+| Windows host (your PC) | `dist/DeskLinkHost.exe` | 644 KB (version 2.4), no install required to try |
 | Android app (your phone) | `dist/DeskLink.apk` | 185 KB (version 2.9.1) |
 
 On GitHub, both files are attached to each release (*Releases*, on the right of the repository page) rather than kept
 in the code.
+
+## Preview
+
+Linking a phone, on the PC: DeskLink waits for the phone, shows the code to compare, and the phone is linked.
+
+| Waiting for a phone | The code to compare | Linked |
+|---|---|---|
+| <img src="docs/pc-pair-waiting.png" alt="DeskLink on the PC waiting for a phone to pair" width="280"> | <img src="docs/pc-pair-request.png" alt="A phone asking to pair, with the 6-digit code to compare" width="280"> | <img src="docs/pc-pair-done.png" alt="The phone is linked" width="280"> |
 
 ## 1. Set up the PC (once per PC)
 
@@ -257,6 +265,9 @@ To unlink a phone, open the tray icon on the PC → **Linked phones** → click 
 * From the internet, a connection must start with a knock made with a paired phone's secret. It is valid only within
   10 minutes of the PC's clock and only once, and anything else is dropped before the handshake. Ten failed tries
   block that address for 10 minutes. New phones can only be paired on the home network.
+* Home means this PC's own network, or its own Tailscale: a 100.x address counts as home only when the connection
+  comes in through this PC's Tailscale address. Some internet companies give their customers 100.x addresses too;
+  those are treated as the internet, so they need the knock and can't pair.
 * The router port is open only while DeskLink runs with *Allow access over mobile data* on.
 * No accounts, no telemetry, no third-party servers: for mobile data DeskLink talks only to your own router.
 
@@ -323,6 +334,11 @@ the real one, and the space between the screens was black. The protocol (all scr
 switching to one screen and back, older phones) was tested over 127.0.0.1. Not yet tried with two real monitors or on
 the phone.
 Version 2.9.1 (phone) redraws the *All screens* icon at the size of the other screen icons (it was bigger).
+Version 2.4 (PC): a 100.x address counts as home only when the connection comes in through this PC's own Tailscale
+address. Until then any 100.x address did, and some internet companies give their customers those (CGNAT). Now
+those connections need the knock like any other from the internet, and the PC doesn't answer their search for PCs.
+Checked with 15 address cases (Tailscale ones with a stand-in address, since this PC has no Tailscale) and, over
+127.0.0.1, pairing and sessions from home plus every knock check from the internet.
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del).

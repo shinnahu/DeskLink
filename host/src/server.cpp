@@ -174,6 +174,17 @@ bool Server::CheckKnock(const uint8_t* k) {
   return true;
 }
 
+// This PC's end of a connection ("" if it can't tell).
+static std::string OurIp(SOCKET s) {
+  sockaddr_storage ss{};
+  int len = sizeof(ss);
+  if (getsockname(s, (sockaddr*)&ss, &len) != 0) return "";
+  char host[INET6_ADDRSTRLEN] = {};
+  if (ss.ss_family == AF_INET) inet_ntop(AF_INET, &((sockaddr_in*)&ss)->sin_addr, host, sizeof(host));
+  else if (ss.ss_family == AF_INET6) inet_ntop(AF_INET6, &((sockaddr_in6*)&ss)->sin6_addr, host, sizeof(host));
+  return host;
+}
+
 static void SendResult(SecureChannel& ch, uint8_t type, uint8_t status, const std::string& message) {
   Writer w(type);
   w.u8(status).str(message);
@@ -193,8 +204,9 @@ void Server::HandleConnection(SOCKET s, std::string peer) {
     return;
   }
   // From the internet (mobile data): only while that's allowed on the PC, and only after a valid knock, which
-  // only a paired phone can make. Anything else is dropped before the handshake.
-  bool local = remote::IsLocalAddress(ip);
+  // only a paired phone can make. Anything else is dropped before the handshake. Home is this PC's network or its
+  // own Tailscale; a 100.x address that didn't come through this PC's Tailscale is on the internet.
+  bool local = remote::IsHomeConnection(ip, OurIp(s));
   if (!local && !remote::Enabled()) return;
   ch->SetRecvTimeout(local ? 15000 : 5000);
   auto knockOk = [&](const uint8_t* k) { return CheckKnock(k); };
@@ -407,7 +419,8 @@ void Server::DiscoveryLoop() {
     }
     char fromIp[INET_ADDRSTRLEN] = {};
     inet_ntop(AF_INET, &from.sin_addr, fromIp, sizeof(fromIp));
-    if (n >= 10 && memcmp(buf, "DESKLINK?1", 10) == 0 && remote::IsLocalAddress(fromIp)) {  // home network only
+    // home network only (a broadcast never comes over Tailscale, so 100.x senders are strangers here)
+    if (n >= 10 && memcmp(buf, "DESKLINK?1", 10) == 0 && remote::IsHomeConnection(fromIp, "")) {
       std::string resp = "DESKLINK!1" + DiscoveryJson();
       sendto(udp_, resp.data(), (int)resp.size(), 0, (sockaddr*)&from, fl);
     }

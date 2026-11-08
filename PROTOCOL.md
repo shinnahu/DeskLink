@@ -29,9 +29,11 @@ This document is the single source of truth for everything that crosses the netw
 Before encryption, each handshake message is framed as `u32 length` + `body` (length ≤ 4096).
 
 ### Knock (connections from the internet)
-A peer is **local** if its address is loopback, private or link-local IPv4, `100.64.0.0/10` (Tailscale / CGNAT), or
-IPv6 loopback, link-local or unique-local (`fc00::/7`); IPv4-mapped IPv6 counts as its IPv4. Anyone else is on the
-internet (mobile data), and its first frame must be a knock, body = 60 bytes:
+A peer is **local** if its address is loopback, private or link-local IPv4, or IPv6 loopback, link-local or
+unique-local (`fc00::/7`); IPv4-mapped IPv6 counts as its IPv4. `100.64.0.0/10` is local only when the connection
+arrived on one of the host's own Tailscale addresses: internet companies use the same range for their customers
+(CGNAT), and those are strangers. Anyone else is on the internet (mobile data), and its first frame must be a knock,
+body = 60 bytes:
 
 | field | size |
 |---|---|

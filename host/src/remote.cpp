@@ -571,6 +571,59 @@ bool IsLocalAddress(const std::string& ip) {
   return false;
 }
 
+// "::ffff:a.b.c.d" (IPv4 on a dual-stack socket) -> "a.b.c.d"; anything else as it is
+static std::string PlainV4(const std::string& ip) {
+  if (ip.size() > 7 && _strnicmp(ip.c_str(), "::ffff:", 7) == 0 && ip.find('.') != std::string::npos) return ip.substr(7);
+  return ip;
+}
+
+static bool InCgnatRange(const std::string& ip) {  // 100.64.0.0/10: Tailscale, or an internet company's NAT
+  uint8_t b[4];
+  return ParseV4(PlainV4(ip), b) && b[0] == 100 && (b[1] & 0xC0) == 64;
+}
+
+std::vector<std::string> TailscaleAddresses() {
+  std::vector<std::string> out;
+  ULONG size = 16 * 1024;
+  std::vector<uint8_t> buf(size);
+  auto* aa = (IP_ADAPTER_ADDRESSES*)buf.data();
+  ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+  ULONG r = GetAdaptersAddresses(AF_INET, flags, nullptr, aa, &size);
+  if (r == ERROR_BUFFER_OVERFLOW) {
+    buf.resize(size);
+    aa = (IP_ADAPTER_ADDRESSES*)buf.data();
+    r = GetAdaptersAddresses(AF_INET, flags, nullptr, aa, &size);
+  }
+  if (r != NO_ERROR) return out;
+  for (auto* a = aa; a; a = a->Next) {
+    if (a->OperStatus != IfOperStatusUp) continue;
+    std::wstring names = std::wstring(a->FriendlyName ? a->FriendlyName : L"") + L" " + (a->Description ? a->Description : L"");
+    for (auto& c : names) c = (wchar_t)towlower(c);
+    if (names.find(L"tailscale") == std::wstring::npos) continue;  // its adapter: "Tailscale" / "Tailscale Tunnel"
+    for (auto* u = a->FirstUnicastAddress; u; u = u->Next) {
+      if (u->Address.lpSockaddr->sa_family != AF_INET) continue;
+      char host[INET_ADDRSTRLEN] = {};
+      inet_ntop(AF_INET, &((sockaddr_in*)u->Address.lpSockaddr)->sin_addr, host, sizeof(host));
+      out.push_back(host);
+    }
+  }
+  return out;
+}
+
+bool IsHomeConnection(const std::string& peer, const std::string& ours, const std::vector<std::string>& tailscale) {
+  if (!IsLocalAddress(peer)) return false;
+  if (!InCgnatRange(peer)) return true;
+  std::string me = PlainV4(ours);
+  for (auto& t : tailscale)
+    if (!me.empty() && t == me) return true;  // it came in through this PC's Tailscale
+  return false;  // the same range on the internet company's side: a stranger
+}
+
+bool IsHomeConnection(const std::string& peer, const std::string& ours) {
+  if (!InCgnatRange(peer)) return IsLocalAddress(peer);  // no need to look at the adapters
+  return IsHomeConnection(peer, ours, TailscaleAddresses());
+}
+
 std::vector<std::string> StableGlobalIpv6() {
   std::vector<std::string> stable, dhcp;
   ULONG size = 32 * 1024;

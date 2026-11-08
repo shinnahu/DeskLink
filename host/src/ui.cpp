@@ -953,7 +953,8 @@ static int PngEncoder(CLSID* clsid) {
 
 int RenderPreviews(const std::wstring& dir) {
   static App previewApp;
-  previewApp.hostName = HostDisplayName();
+  previewApp.hostName = "OFFICE-PC";  // the README's pictures: not this PC's own name
+  previewApp.OpenPairing(594);        // "Waiting for a phone…  9:54 left"
   g_app = &previewApp;
   g_inst = GetModuleHandleW(nullptr);
   GdiplusStartupInput si;

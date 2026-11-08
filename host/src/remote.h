@@ -28,9 +28,20 @@ uint8_t Flags();
 std::string PublicAddress(); // "a.b.c.d" or "a.b.c.d:port" while the IPv4 forwarding works, else ""
 std::wstring Describe();     // one line for the tray menu
 
-// Is this peer on the home network (or Tailscale), as opposed to the internet? Loopback, private and link-local
-// IPv4, 100.64/10 (CGNAT / Tailscale), and IPv6 loopback, link-local and unique-local (fc00::/7).
+// Is this address a home-network one, as opposed to the internet? Loopback, private and link-local IPv4,
+// 100.64/10 (CGNAT / Tailscale), and IPv6 loopback, link-local and unique-local (fc00::/7). On its own it can't tell
+// Tailscale from an internet company's CGNAT: decide on connections with IsHomeConnection.
 bool IsLocalAddress(const std::string& ip);
+
+// Is this connection from home (this PC's network, or its own Tailscale), as opposed to the internet? `peer` is the
+// other end, `ours` this PC's end ("" when not known: then 100.64/10 is the internet). Like IsLocalAddress, except
+// that 100.64.0.0/10 is home only when the connection came in through this PC's Tailscale address: internet companies
+// give their customers addresses there too (CGNAT), and those are strangers.
+bool IsHomeConnection(const std::string& peer, const std::string& ours);
+// The same with this PC's Tailscale addresses given (self-test).
+bool IsHomeConnection(const std::string& peer, const std::string& ours, const std::vector<std::string>& tailscale);
+// This PC's IPv4 addresses on Tailscale's network adapter (none without Tailscale).
+std::vector<std::string> TailscaleAddresses();
 
 // The PC's public IPv6 addresses that stay put (not the temporary privacy ones).
 std::vector<std::string> StableGlobalIpv6();

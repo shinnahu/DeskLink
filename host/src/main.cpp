@@ -24,6 +24,7 @@
 
 int RunCaptureSelfTest(int seconds, const std::wstring& out, int maxW, int maxH, int fps, int kbps, int monitor);
 int RunInputSelfTest();
+int RunHomeSelfTest();
 
 static int RunAgent(bool noUi, int exitAfterSec) {
   std::wstring mutexName = g_opt.systemMode ? L"Global\\DeskLinkHostAgent" : L"Local\\DeskLinkHostUser";
@@ -176,6 +177,7 @@ static int AppMain(int argc, wchar_t** argv) {
   }
 #ifdef DESKLINK_TESTING
   if (has(L"--test-input")) return RunInputSelfTest();
+  if (has(L"--test-home")) return RunHomeSelfTest();
   if (!val(L"--test-render-ui").empty()) return ui::RenderPreviews(val(L"--test-render-ui"));
 #endif
 
