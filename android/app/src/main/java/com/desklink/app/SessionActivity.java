@@ -592,8 +592,8 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         HostConnection c = session != null ? session.connection() : null;
         if (c != null) c.selectMonitor(index);
         refreshScreenButtons();
-        // which one, briefly (unless a file is on its way: its progress is in the same place)
-        if (!uploading && downloads.isEmpty()) showSnack(screenName(index), -1, null, null, 1500);
+        // which one, briefly (unless a file is on its way: its progress is in the same place; or Short notes is off)
+        if (prefs.tapNotes() && !uploading && downloads.isEmpty()) showSnack(screenName(index), -1, null, null, 1500);
     }
 
     /** The PC's screens left to right (then top to bottom), as Windows arranges them. */
@@ -1429,7 +1429,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         prefs.setAlwaysShowBar(barPinned);
         refreshDock();
         layoutChrome();
-        showSnack(getString(barPinned ? R.string.bar_pinned : R.string.bar_unpinned), -1, null, null, 2000);
+        if (prefs.tapNotes()) showSnack(getString(barPinned ? R.string.bar_pinned : R.string.bar_unpinned), -1, null, null, 2000);
     }
 
     // =================================================================== settings (one page over the session)
@@ -1532,7 +1532,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
                 break;
             }
             default:
-                break; // the fingerprint lock needs nothing here
+                break; // the fingerprint lock and Short notes need nothing here (notes check it each time)
         }
     }
 
@@ -1913,6 +1913,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         if (gaming && !was && imeVisible) hideKeyboard(); // the gamepad needs the room; three fingers up brings it back
         refreshModeButton();
         layoutChrome();
+        if (!prefs.tapNotes()) return;
         String note = gaming ? getString(R.string.gp_on, gamepad.active().name)
                 : getString(m == MODE_DIRECT ? R.string.mode_switched_direct : R.string.mode_switched_trackpad);
         showSnack(note, -1, null, null, gaming ? 3000 : 1800);

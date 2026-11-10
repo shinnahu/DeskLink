@@ -53,6 +53,11 @@ final class Prefs {
 
     void setShowStats(boolean v) { sp.edit().putBoolean("stats", v).apply(); }
 
+    /** The short notes that confirm a tap (Shortcut bar stays on screen, Trackpad mode, Screen 2 of 2): on by default. */
+    boolean tapNotes() { return sp.getBoolean("tapNotes", true); }
+
+    void setTapNotes(boolean v) { sp.edit().putBoolean("tapNotes", v).apply(); }
+
     boolean fullScreen() { return sp.getBoolean("fullScreen", false); }
 
     void setFullScreen(boolean v) { sp.edit().putBoolean("fullScreen", v).apply(); }

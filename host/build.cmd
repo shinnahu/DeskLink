@@ -13,7 +13,7 @@ rc /nologo /fo build\app.res res\app.rc || exit /b 1
 
 set CFLAGS=/nologo /std:c++20 /EHsc /O2 /MT /W3 /utf-8 /Zi /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_CRT_SECURE_NO_WARNINGS
 set LFLAGS=/MANIFEST:EMBED /MANIFESTUAC:NO /MANIFESTINPUT:res\app.manifest /DEBUG /OPT:REF /OPT:ICF
-set LIBS=d3d11.lib dxgi.lib mfplat.lib mfuuid.lib mf.lib ws2_32.lib bcrypt.lib crypt32.lib user32.lib gdi32.lib gdiplus.lib shell32.lib ole32.lib oleaut32.lib advapi32.lib dwmapi.lib wtsapi32.lib userenv.lib iphlpapi.lib shlwapi.lib winmm.lib comctl32.lib winhttp.lib
+set LIBS=d3d11.lib dxgi.lib mfplat.lib mfuuid.lib mf.lib ws2_32.lib bcrypt.lib crypt32.lib user32.lib gdi32.lib gdiplus.lib shell32.lib ole32.lib oleaut32.lib advapi32.lib dwmapi.lib wtsapi32.lib userenv.lib iphlpapi.lib shlwapi.lib winmm.lib comctl32.lib winhttp.lib setupapi.lib
 
 if /i "%1"=="test" goto test
 cl %CFLAGS% /Fobuild\obj\ /Fdbuild\obj\ /Febuild\DeskLinkHost.exe src\*.cpp build\app.res /link /SUBSYSTEM:WINDOWS %LFLAGS% %LIBS% || exit /b 1

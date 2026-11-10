@@ -57,6 +57,9 @@ struct RuntimeOptions {
   bool testNoInject = false;          // DESKLINK_TESTING: log input instead of injecting it
   int testFakeScreens = 0;            // DESKLINK_TESTING: the main screen also shown as this many more screens
   bool testRouterIsLoopback = false;  // DESKLINK_TESTING: 127.0.0.1 counts as this PC's router
+  bool testNoScreen = false;          // DESKLINK_TESTING: the monitors are left out, as if switched off
+  int testDropVirtualAt = 0;          // DESKLINK_TESTING: --test-capture takes the virtual screen away (as its driver
+                                      // might) this many seconds in
 };
 extern RuntimeOptions g_opt;
 

@@ -231,6 +231,8 @@
     <string name="set_quality_sum">Automática gasta menos con datos móviles.</string>
     <string name="set_full_screen_sum">Oculta las barras de estado y de navegación de Android durante la sesión.</string>
     <string name="set_stats_sum">Cuadros por segundo, datos y ping sobre la imagen.</string>
+    <string name="set_notes">Avisos breves</string>
+    <string name="set_notes_sum">Confirmaciones como “La barra de atajos queda fija en pantalla” o “Modo panel táctil”. Los mensajes de archivos y de la PC se ven siempre.</string>
     <string name="set_clipboard">Portapapeles</string>
     <string name="set_clipboard_sum">Copiá de un lado y pegá del otro.</string>
     <string name="set_security">Seguridad</string>

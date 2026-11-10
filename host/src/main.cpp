@@ -25,6 +25,7 @@
 int RunCaptureSelfTest(int seconds, const std::wstring& out, int maxW, int maxH, int fps, int kbps, int monitor);
 int RunInputSelfTest();
 int RunHomeSelfTest();
+int RunVirtualScreenSelfTest();
 
 static int RunAgent(bool noUi, int exitAfterSec) {
   std::wstring mutexName = g_opt.systemMode ? L"Global\\DeskLinkHostAgent" : L"Local\\DeskLinkHostUser";
@@ -142,6 +143,8 @@ static int AppMain(int argc, wchar_t** argv) {
   g_opt.testNoInject = has(L"--no-inject");
   g_opt.testFakeScreens = _wtoi(val(L"--fake-screens").c_str());
   g_opt.testRouterIsLoopback = has(L"--router-is-loopback");
+  g_opt.testNoScreen = has(L"--fake-no-screen");
+  g_opt.testDropVirtualAt = _wtoi(val(L"--test-drop-virtual").c_str());
   if (!val(L"--upnp-url").empty()) remote::SetTestLocation(W2U(val(L"--upnp-url")));
 #endif
 
@@ -179,6 +182,7 @@ static int AppMain(int argc, wchar_t** argv) {
 #ifdef DESKLINK_TESTING
   if (has(L"--test-input")) return RunInputSelfTest();
   if (has(L"--test-home")) return RunHomeSelfTest();
+  if (has(L"--test-virtual-screen")) return RunVirtualScreenSelfTest();
   if (!val(L"--test-render-ui").empty()) return ui::RenderPreviews(val(L"--test-render-ui"));
 #endif
 

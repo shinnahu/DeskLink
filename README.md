@@ -4,8 +4,8 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 
 | part | file | size |
 |---|---|---|
-| Windows host (your PC) | `dist/DeskLinkHost.exe` | 645 KB (version 2.5), no install required to try |
-| Android app (your phone) | `dist/DeskLink.apk` | 185 KB (version 2.9.2) |
+| Windows host (your PC) | `dist/DeskLinkHost.exe` | 660 KB (version 2.6), no install required to try |
+| Android app (your phone) | `dist/DeskLink.apk` | 186 KB (version 2.9.4) |
 
 On GitHub, both files are attached to each release (*Releases*, on the right of the repository page) rather than kept
 in the code.
@@ -130,7 +130,8 @@ so dragging across the bar never presses anything.
 | ← ↑ ↓ → | the arrow keys (hold to repeat) |
 
 *Predictive text* (Settings → Keyboard, on by default): the keyboard's word suggestions, autocorrect and swipe typing;
-corrections are replayed on the PC.
+corrections are replayed on the PC, retyping only what changed. The keyboard sees the text typed since the PC's caret
+last moved (a click, the arrow keys, Enter), so it can go back over the word it just typed.
 
 **Top bar**: the PC's name, the connection dot and ping, and buttons for the touch mode (trackpad, direct touch or
 Gaming mode), the PC's screens, and the ⋮ menu. The screen buttons appear when the PC has more than one screen:
@@ -140,7 +141,9 @@ Gaming mode), the PC's screens, and the ⋮ menu. The screen buttons appear when
 * **Next screen** (a screen and an arrow) goes to the next screen to the right, and after the last one back to the
   first.
 
-A short note at the bottom says which screen is showing (*Screen 2 of 2*, counting from the left). The ⋮ menu has
+A short note at the bottom says which screen is showing (*Screen 2 of 2*, counting from the left). Notes like it, and
+the ones after switching the touch mode or pinning the shortcut bar (*Shortcut bar stays on screen*), can be turned off
+in Settings → Picture → *Short notes* (on by default). Messages about files and from the PC still show. The ⋮ menu has
 *Send files to PC*, *Get file from PC*, *Screen* (all of them or one, with several monitors), *Ctrl+Alt+Del*, *Lock PC*,
 *Task Manager*, *Settings* and *Disconnect*. The bar stays on screen, and the picture sits below it rather than under
 it. Hide it with **˄**; the
@@ -235,6 +238,25 @@ reconnects if needed. After 60 s in the background it disconnects.
 **On the PC**: a small **● Shared with Galaxy S23 [Stop]** pill sits in the bottom-right corner. It shows the phone's name,
 not your email; you can drag it anywhere, and **Stop** ends the session. The PC and its screen stay awake while a phone is
 connected.
+
+**With the PC's monitor off**: switching off a monitor on DisplayPort (and some on HDMI) looks to Windows as if it was
+unplugged. Windows keeps its screen on the desktop, with nothing behind it, and draws nothing to it, so there's no
+picture to send. DeskLink can show a virtual screen instead, made by Parsec's free virtual display driver; Windows
+then moves the desktop onto it. Install the driver once on the PC: download
+[parsec-vdd-0.45.0.0.exe](https://builds.parsec.app/vdd/parsec-vdd-0.45.0.0.exe) from Parsec and run it (it asks for
+admin). If that version doesn't work on the PC, use [0.41](https://builds.parsec.app/vdd/parsec-vdd-0.41.0.0.exe).
+Then:
+* A phone that connects while no monitor is on shows *The PC's monitor is off. Starting a virtual screen…* for a
+  moment, then a 1920×1080 virtual screen with the PC's windows on it.
+* Switch the monitor back on and the virtual screen goes 2 seconds later; the windows move back to the monitor.
+* Should the driver take the virtual screen away while the phone is connected, DeskLink puts in a new one: the phone
+  shows *Starting a virtual screen…* for a few seconds, then the picture again.
+* After the phone disconnects, the virtual screen stays 30 seconds (a phone that reconnects gets it back), then goes.
+  If DeskLink stops, the driver removes it within about a second.
+* Without the driver, the phone says *The PC's monitor is off or unplugged*.
+
+It needs DeskLink 2.6 on the PC. The driver is Parsec's own (closed source), so DeskLink doesn't include it. A dummy
+plug (a DisplayPort or HDMI "headless display emulator") in a free port of the graphics card also works, with no driver.
 
 ## 4. Away from home (mobile data)
 
@@ -362,9 +384,44 @@ Version 2.5 (PC) refuses pairing from the router's own address. Some routers pas
 the PC under their own address, which counts as home; during the 10 minutes pairing is open, a stranger's request
 could have shown up on the PC (it still needed your click). Checked with 5 router cases and, over 127.0.0.1 with the
 test PC treating 127.0.0.1 as its router, a refused pairing request; pairing from home and every knock check still pass.
+Version 2.6 (PC) shows a virtual screen while the PC's monitor is off (*With the PC's monitor off*, above), made by
+Parsec's virtual display driver 0.45. Checked on this PC, whose one monitor is on DisplayPort, with the driver
+installed. With the monitor really switched off, Windows had no monitor at all, but it kept the monitor's screen on
+the desktop as the main one, calling it available. Nothing was drawn to it: the earlier version got not one frame in
+two minutes, which is why the phone waited for the screen forever. DeskLink now leaves such a screen out (no monitor
+is behind it) and puts in the virtual screen. Windows moved the desktop onto it at 0,0, and the picture came 0.7 s
+after the stream started: 3,200 frames in 150 s, with the PC's windows on it. The same worked when the left-behind
+screen was the virtual one's. With the monitor on, the virtual screen was on the desktop within a second, at
+1920×1080 and 60 Hz, and the pings kept it. It went 2.3 s after the real monitor counted as on, and 30 s after the
+last stream ended. With DeskLink closed, the driver removed it 1.2 s later. A test build that leaves the real monitor
+out streamed the virtual screen over 127.0.0.1, and every protocol check passed. The phone first sees *The PC's
+monitor is off. Starting a virtual screen…*, then the picture. That test also showed a fault in the PC-side test
+client: a wait that timed out could swallow the next message, so a picture that took a moment to start broke the
+rest of the test. From the phone, through the installed service, a monitor switched off mid-stream was noticed within
+2 s and the virtual screen was streamed 0.7 s later; switched back on, the picture moved back to the monitor and the
+virtual screen went 2 s later. In between, though, the driver took the virtual screen away after 2–3 s and DeskLink
+didn't notice, so every reconnect said *the virtual screen didn't start*. Most likely the pings stalled: the check for a
+monitor being back on ran between them and can wait on Windows while it rearranges the screens, and the driver removes
+its screens about a second after the last ping. The pings now have a thread of their own (at most 266 ms apart through
+the tests' screen changes), and a screen the driver takes away is replaced: taken away on purpose mid-stream, the
+phone was told *Starting a virtual screen…* at once and the picture was back 4.7 s later. With that build installed as
+the service, from the phone with the monitor switched off, the virtual screen came in and stayed the whole 18 s until
+the monitor was switched back on, and the phone showed the PC's windows on it; it went 2 s after the monitor came back.
+Version 2.9.3 (phone) adds Settings → Picture → *Short notes*, on by default. Turned off, the notes after switching
+the touch mode or the screen, or pinning the shortcut bar, don't show. Built; not yet tried on the phone.
+Version 2.9.4 (phone) fixes predictive text typing a word twice: with Samsung's keyboard, "program." and then "e" gave
+"program.program.e" on the PC. A letter right after "word." makes the keyboard go back over "word." as one word with
+the letter; the app kept no text, refused that, and typed the whole word again. It now keeps the text it typed since
+the PC's caret last moved, so going back over it costs only the keystrokes that differ. Checked with a unit test that
+plays keyboards' calls into the app's real keyboard code (Robolectric): Samsung's going back after "word.", Gboard's
+Backspace into a word, autocorrect, an emoji, and a click, Enter or a long text in between. On the phone, "program.exe"
+now comes out right.
 
 Not yet verified:
-* the installed-service features (lock screen, UAC, Ctrl+Alt+Del).
+* the installed-service features (lock screen, UAC, Ctrl+Alt+Del);
+* a long session on the virtual screen from the phone, and a virtual screen taken away while it's the only screen
+  (the monitor really off) (2.6);
+* 2.9.4's predictive text beyond "program.exe" (other words, other keyboards such as Gboard).
 
 There is no audio streaming.
 
