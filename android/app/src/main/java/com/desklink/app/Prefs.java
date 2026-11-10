@@ -62,9 +62,10 @@ final class Prefs {
 
     void setFullScreen(boolean v) { sp.edit().putBoolean("fullScreen", v).apply(); }
 
-    boolean alwaysShowBar() { return sp.getBoolean("showBar", false); }
+    /** The shortcut bar's button: on = the bar is shown, keyboard open or not; off = never shown. */
+    boolean showBar() { return sp.getBoolean("showBar", true); }
 
-    void setAlwaysShowBar(boolean v) { sp.edit().putBoolean("showBar", v).apply(); }
+    void setShowBar(boolean v) { sp.edit().putBoolean("showBar", v).apply(); }
 
     /** The mobile-data flags last shown for a PC (Protocol.REMOTE_*), so the note appears again only when they change. */
     int remoteShown(String hostId) { return sp.getInt("remoteShown_" + hostId, -1); }

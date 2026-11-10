@@ -5,7 +5,7 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 | part | file | size |
 |---|---|---|
 | Windows host (your PC) | `dist/DeskLinkHost.exe` | 660 KB (version 2.6), no install required to try |
-| Android app (your phone) | `dist/DeskLink.apk` | 186 KB (version 2.9.4) |
+| Android app (your phone) | `dist/DeskLink.apk` | 186 KB (version 2.9.5) |
 
 On GitHub, both files are attached to each release (*Releases*, on the right of the repository page) rather than kept
 in the code.
@@ -110,14 +110,15 @@ it to pick one, including a Gaming mode profile. *Direct touch*: tap where you w
 | button | does |
 |---|---|
 | ⌨ keyboard | show / hide the phone keyboard |
-| shortcut keys | keep the shortcut bar on screen, keyboard open or not; tap again to turn it off (highlighted while on) |
+| shortcut keys | show the shortcut bar, keyboard open or not (highlighted while on; on by default); tap again to hide it, also while the keyboard is open |
 
 **Keyboard**: the phone's normal keyboard, never a PC layout. Every key reaches the PC immediately, with no "type then
 press Enter" step, and nothing is lost if no text field was selected. **Back hides the keyboard.** When the keyboard is
 closed, Back asks before disconnecting instead of closing the app. If you leave DeskLink with the keyboard open (home
 screen, another app, the notification shade), it opens again when you come back.
 
-**Shortcut bar** (appears above the keyboard and slides with it; stays on screen when turned on with the button above).
+**Shortcut bar** (shown while the button above is on: at the bottom of the screen, or above the keyboard, sliding with
+it; with the button off it doesn't show, not even with the keyboard).
 It's a row of four group buttons that never scrolls. Tap a group to show its keys in a row above it, and tap it again
 to hide them; the bar remembers which group you left open. A key only fires when your finger lifts without sliding,
 so dragging across the bar never presses anything.
@@ -126,7 +127,7 @@ so dragging across the bar never presses anything.
 |---|---|
 | Edit | Undo, Redo (Ctrl+Z, Ctrl+Shift+Z), Cut, Copy, Paste (Ctrl+X, Ctrl+C, Ctrl+V) |
 | Ctrl Alt | Ctrl, ⇧ Shift, Alt, ⊞ Win (Shift and Win as icons). Ctrl, Shift, Alt: tap = stays pressed until you tap it again, and its name shows on the group button while another group is open; touch and hold = pressed while held. With Settings → Keyboard → *Pressed only while you hold it*, a tap doesn't lock: the key is pressed while your finger is on it, and a quick tap is a plain press. Win never stays pressed: a tap is a plain press (it opens Start), and touch and hold = pressed while held, for Win + a key. Nothing is sent to the PC until it's a tap or a hold, so a drag that starts on Win doesn't open the Start menu |
-| Esc Tab | Esc, Tab, Del (Tab and Del as icons). The phone keyboard's ⌫ is Backspace, which deletes to the left; Del deletes to the right, or the files selected in File Explorer |
+| Esc Tab | Esc, Tab, Space, Del (Tab, Space and Del as icons; Space and Del repeat while held). Space is the real Space key, for games, video players and buttons: the phone keyboard's space arrives on the PC as typed text, which those ignore, and with predictive text it may pick a suggestion first. The phone keyboard's ⌫ is Backspace, which deletes to the left; Del deletes to the right, or the files selected in File Explorer |
 | ← ↑ ↓ → | the arrow keys (hold to repeat) |
 
 *Predictive text* (Settings → Keyboard, on by default): the keyboard's word suggestions, autocorrect and swipe typing;
@@ -142,7 +143,7 @@ Gaming mode), the PC's screens, and the ⋮ menu. The screen buttons appear when
   first.
 
 A short note at the bottom says which screen is showing (*Screen 2 of 2*, counting from the left). Notes like it, and
-the ones after switching the touch mode or pinning the shortcut bar (*Shortcut bar stays on screen*), can be turned off
+the ones after switching the touch mode or turning the shortcut bar on or off (*Shortcut bar shown*), can be turned off
 in Settings → Picture → *Short notes* (on by default). Messages about files and from the PC still show. The ⋮ menu has
 *Send files to PC*, *Get file from PC*, *Screen* (all of them or one, with several monitors), *Ctrl+Alt+Del*, *Lock PC*,
 *Task Manager*, *Settings* and *Disconnect*. The bar stays on screen, and the picture sits below it rather than under
@@ -416,12 +417,19 @@ the PC's caret last moved, so going back over it costs only the keystrokes that 
 plays keyboards' calls into the app's real keyboard code (Robolectric): Samsung's going back after "word.", Gboard's
 Backspace into a word, autocorrect, an emoji, and a click, Enter or a long text in between. On the phone, "program.exe"
 now comes out right.
+Version 2.9.5 (phone) adds a Space key to the shortcut bar's Esc Tab group (Esc, Tab, Space, Del). It's the real Space
+key: the phone keyboard's space reaches the PC as typed text, which games, video players and buttons don't take as a
+Space press, and with predictive text it may pick a suggestion first. The shortcut bar's button now shows or hides the
+bar: off, the bar no longer comes up with the keyboard (the two corner buttons stay). The button is on by default, so a
+new install shows the bar, keyboard open or not. Checked with unit tests (a tap on Space is one Space press, a hold repeats it and lets go; the group
+holds the four keys) and a picture of the bar drawn by the app's code. Not yet tried on the phone.
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del);
 * a long session on the virtual screen from the phone, and a virtual screen taken away while it's the only screen
   (the monitor really off) (2.6);
-* 2.9.4's predictive text beyond "program.exe" (other words, other keyboards such as Gboard).
+* 2.9.4's predictive text beyond "program.exe" (other words, other keyboards such as Gboard);
+* 2.9.5 on the phone: the Space key, and the bar hidden with the keyboard open.
 
 There is no audio streaming.
 

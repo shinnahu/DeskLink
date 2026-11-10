@@ -98,10 +98,13 @@ final class ShortcutBar extends LinearLayout {
         }
         groupKeys.add(mods);
 
-        // (the phone keyboard's ⌫ is Backspace, which deletes to the left; Del deletes to the right, or the selected files)
+        // Space is the key itself: the phone keyboard's space arrives as typed text, which games and players ignore,
+        // and with predictive text it may take a suggestion first. (The phone keyboard's ⌫ is Backspace, which
+        // deletes to the left; Del deletes to the right, or the selected files.)
         List<View> keys = new ArrayList<>();
         keys.add(key(c.getString(R.string.key_esc), 0, Vk.ESCAPE, false));
         keys.add(key(c.getString(R.string.key_tab), R.drawable.ic_key_tab, Vk.TAB, false));
+        keys.add(key(c.getString(R.string.key_space), R.drawable.ic_key_space, Vk.SPACE, true));
         keys.add(key(c.getString(R.string.key_del), R.drawable.ic_key_del, Vk.DELETE, true));
         groupKeys.add(keys);
 
