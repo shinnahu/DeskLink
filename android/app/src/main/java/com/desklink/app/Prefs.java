@@ -53,13 +53,19 @@ final class Prefs {
 
     void setShowStats(boolean v) { sp.edit().putBoolean("stats", v).apply(); }
 
+    /** The short notes that confirm a tap (Shortcut bar stays on screen, Trackpad mode, Screen 2 of 2): on by default. */
+    boolean tapNotes() { return sp.getBoolean("tapNotes", true); }
+
+    void setTapNotes(boolean v) { sp.edit().putBoolean("tapNotes", v).apply(); }
+
     boolean fullScreen() { return sp.getBoolean("fullScreen", false); }
 
     void setFullScreen(boolean v) { sp.edit().putBoolean("fullScreen", v).apply(); }
 
-    boolean alwaysShowBar() { return sp.getBoolean("showBar", false); }
+    /** The shortcut bar's button: on = the bar is shown, keyboard open or not; off = never shown. */
+    boolean showBar() { return sp.getBoolean("showBar", true); }
 
-    void setAlwaysShowBar(boolean v) { sp.edit().putBoolean("showBar", v).apply(); }
+    void setShowBar(boolean v) { sp.edit().putBoolean("showBar", v).apply(); }
 
     /** The mobile-data flags last shown for a PC (Protocol.REMOTE_*), so the note appears again only when they change. */
     int remoteShown(String hostId) { return sp.getInt("remoteShown_" + hostId, -1); }

@@ -124,10 +124,10 @@
 
     <string name="tb_keyboard">Keyboard</string>
     <string name="tb_keyboard_hide">Hide keyboard</string>
-    <string name="bar_pin">Keep the shortcut bar on screen</string>
-    <string name="bar_unpin">Hide the shortcut bar</string>
-    <string name="bar_pinned">Shortcut bar stays on screen</string>
-    <string name="bar_unpinned">Shortcut bar shows only with the keyboard</string>
+    <string name="bar_show">Show the shortcut bar</string>
+    <string name="bar_hide">Hide the shortcut bar</string>
+    <string name="bar_shown">Shortcut bar shown</string>
+    <string name="bar_hidden">Shortcut bar hidden, also with the keyboard</string>
 
     <string name="pointer_speed">Pointer speed</string>
     <string name="pointer_speed_value" translatable="false">%1$d / %2$d</string>
@@ -150,6 +150,7 @@
     <string name="key_esc" translatable="false">Esc</string>
     <string name="key_tab" translatable="false">Tab</string>
     <string name="key_del">Del</string>
+    <string name="key_space">Space</string>
     <string name="key_home">Home</string>
     <string name="key_end">End</string>
     <string name="cd_undo">Undo (Ctrl+Z)</string>
@@ -162,7 +163,7 @@
     <string name="group_keys" translatable="false">Esc Tab</string>
     <string name="cd_group_edit">Undo, redo, cut, copy, paste</string>
     <string name="cd_group_mods" translatable="false">Ctrl, Shift, Alt, Win</string>
-    <string name="cd_group_keys">Esc, Tab, Del, Home, End</string>
+    <string name="cd_group_keys">Esc, Tab, Space, Del</string>
     <string name="cd_group_arrows">Arrow keys</string>
 
     <!-- Fingerprint lock -->
@@ -253,6 +254,8 @@
     <string name="set_quality_sum">Auto uses less data on mobile data.</string>
     <string name="set_full_screen_sum">Hides Android\'s status and navigation bars during a session.</string>
     <string name="set_stats_sum">Frames per second, data and ping over the picture.</string>
+    <string name="set_notes">Short notes</string>
+    <string name="set_notes_sum">Confirmations like “Shortcut bar shown” or “Trackpad mode”. Messages about files and from the PC always show.</string>
     <string name="set_clipboard">Clipboard</string>
     <string name="set_clipboard_sum">Copy on one side, paste on the other.</string>
     <string name="set_security">Security</string>

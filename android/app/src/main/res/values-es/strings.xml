@@ -119,10 +119,10 @@
 
     <string name="tb_keyboard">Teclado</string>
     <string name="tb_keyboard_hide">Ocultar teclado</string>
-    <string name="bar_pin">Dejar fija la barra de atajos</string>
-    <string name="bar_unpin">Ocultar la barra de atajos</string>
-    <string name="bar_pinned">La barra de atajos queda fija en pantalla</string>
-    <string name="bar_unpinned">La barra de atajos aparece solo con el teclado</string>
+    <string name="bar_show">Mostrar la barra de atajos</string>
+    <string name="bar_hide">Ocultar la barra de atajos</string>
+    <string name="bar_shown">Barra de atajos visible</string>
+    <string name="bar_hidden">Barra de atajos oculta, también con el teclado</string>
 
     <string name="pointer_speed">Velocidad del puntero</string>
     <string name="pointer_speed_slower">Más lento</string>
@@ -138,6 +138,7 @@
     <string name="screen_n_of">Pantalla %1$d de %2$d</string>
 
     <string name="key_del">Supr</string>
+    <string name="key_space">Espacio</string>
     <string name="key_home">Inicio</string>
     <string name="key_end">Fin</string>
     <string name="cd_undo">Deshacer (Ctrl+Z)</string>
@@ -147,7 +148,7 @@
     <string name="cd_paste">Pegar (Ctrl+V)</string>
     <string name="group_edit">Editar</string>
     <string name="cd_group_edit">Deshacer, rehacer, cortar, copiar, pegar</string>
-    <string name="cd_group_keys">Esc, Tab, Supr, Inicio, Fin</string>
+    <string name="cd_group_keys">Esc, Tab, Espacio, Supr</string>
     <string name="cd_group_arrows">Flechas</string>
 
     <string name="menu_app_lock">Bloquear con huella</string>
@@ -231,6 +232,8 @@
     <string name="set_quality_sum">Automática gasta menos con datos móviles.</string>
     <string name="set_full_screen_sum">Oculta las barras de estado y de navegación de Android durante la sesión.</string>
     <string name="set_stats_sum">Cuadros por segundo, datos y ping sobre la imagen.</string>
+    <string name="set_notes">Avisos breves</string>
+    <string name="set_notes_sum">Confirmaciones como “Barra de atajos visible” o “Modo panel táctil”. Los mensajes de archivos y de la PC se ven siempre.</string>
     <string name="set_clipboard">Portapapeles</string>
     <string name="set_clipboard_sum">Copiá de un lado y pegá del otro.</string>
     <string name="set_security">Seguridad</string>

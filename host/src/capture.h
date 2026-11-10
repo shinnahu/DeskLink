@@ -71,6 +71,8 @@ class Streamer {
     std::vector<uint32_t> turned;  // cpu, turned screen: the picture the right way round
     bool have = false;           // its picture is in capTex_
     int mirrorOf = -1;           // test builds (--fake-screens): no duplication, shows that screen's picture
+    std::wstring gdi;            // \\.\DISPLAYn
+    bool virt = false;           // DeskLink's virtual screen (vdisplay.h)
   };
 
   void Run();
@@ -155,5 +157,7 @@ class Streamer {
   uint32_t lastSentShape_ = 0;
   uint64_t lastCursorSendMs_ = 0;
   uint8_t statusFlags_ = 0xFF;
+  std::string statusText_;
+  int ghostsLogged_ = 0;  // screens left out because their monitor is gone (logged when it changes)
   DesktopFollower desk_;
 };

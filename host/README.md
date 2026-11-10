@@ -1,6 +1,6 @@
 # DeskLink Host (Windows)
 
-Native C++ (Win32 + Direct3D 11 + Media Foundation + CNG). One 644 KB `.exe`, no runtime to install.
+Native C++ (Win32 + Direct3D 11 + Media Foundation + CNG). One 660 KB `.exe`, no runtime to install.
 
 ## Pipeline
 
@@ -20,6 +20,17 @@ Desktop Duplication (GPU) -> D3D11 video processor (BGRA->NV12, scale) -> Media 
   rectangle around them, black where no screen is), which then goes the same way. Screens on the main graphics card are
   copied on the GPU; a screen on another card, or a turned one, through the CPU. The picture is at most 3840×2160 and
   within the decoder size the phone sends; if it can't be made, a smaller one, then the main screen alone.
+* No screen (the monitor switched off, which DisplayPort reports as unplugged, or no monitor at all): Windows keeps
+  the last screen on the desktop with no monitor behind it (its display path is "available", forced by the system,
+  but the target has no monitor device path) and draws nothing to it, so such screens are left out, and a shown one
+  whose monitor goes is noticed within a second. With Parsec's virtual display driver installed, a virtual screen is
+  then added while a phone streams and kept alive with a ping every 100 ms, sent from a thread that does nothing else:
+  the driver takes its screens away about a second after the last ping, and looking at the display layout can wait
+  that long while Windows rearranges the screens. Windows moves the desktop onto it. It goes 2 s after a real monitor
+  is back on the desktop, or 30 s after the last stream ends; the driver removes it by itself about a second after the
+  pings stop. Should the driver take it away while it's needed (its monitor device gone for a second), a new one is put
+  in 1.5 s later (10 s after the third time in a minute), and the capture, which looks for a vanished screen once a
+  second, starts again on it.
 
 ## Source map
 
@@ -31,6 +42,7 @@ Desktop Duplication (GPU) -> D3D11 video processor (BGRA->NV12, scale) -> Media 
 | `session.cpp` | one phone connection: reader + writer threads (video before file data), ping, dispatch |
 | `channel.cpp`, `crypto.cpp` | ECDH P-256 + ECDSA host identity + HKDF + AES-256-GCM (Windows CNG) |
 | `capture.cpp`, `encoder.cpp`, `h264.cpp` | capture, colour conversion, H.264, flow/rate control, cursor |
+| `vdisplay.cpp` | the virtual screen (Parsec VDD) while no monitor is on: added, pinged, taken away |
 | `input.cpp`, `desktop.cpp` | `SendInput` injection (absolute mouse, relative mouse for game cameras, VK keys, Unicode text), input-desktop following |
 | `files.cpp` | phone→PC into `Downloads\DeskLink`, PC→phone via a file picker on the PC |
 | `ui.cpp`, `strings.cpp` | tray menu, "Shared with …" pill, pairing window, clipboard bridge (EN/ES) |
@@ -51,6 +63,11 @@ build.cmd test     :: also build\DeskLinkHostTest.exe (console + self-tests + --
 DeskLinkHostTest.exe --data %TEMP%\dl --test-capture 5 out.h264      :: capture+encode to a file
 DeskLinkHostTest.exe --data %TEMP%\dl --test-capture 5 out.h264 1920 1920 30 0 all   :: all screens in one picture
 :: with one screen: --fake-screens 3 shows it again as 3 pretend screens (as it is, upside down, turned 90°)
+:: --fake-no-screen leaves the monitors out, as if switched off: the capture puts in a virtual screen and shows it
+DeskLinkHostTest.exe --data %TEMP%\dl --fake-no-screen --test-capture 5 out.h264
+:: --test-drop-virtual 10: 10 s in, the virtual screen is taken away as its driver might; the picture must come back
+DeskLinkHostTest.exe --data %TEMP%\dl --fake-no-screen --test-drop-virtual 10 --test-capture 25 out.h264
+DeskLinkHostTest.exe --data %TEMP%\dl --test-virtual-screen          :: Parsec VDD: a virtual screen added, kept, replaced, taken away
 DeskLinkHostTest.exe --data %TEMP%\dl --test-input                   :: injection checked by swallowing hooks
 DeskLinkHostTest.exe --data %TEMP%\dl --test-home                    :: which addresses count as home, the router's (20 cases)
 DeskLinkHostTest.exe --data %TEMP%\dl --test-render-ui %TEMP%\png    :: pairing window PNGs

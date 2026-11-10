@@ -16,7 +16,8 @@ import com.desklink.core.Vk;
 
 /**
  * Invisible editor that receives the phone's normal soft keyboard (or a hardware keyboard) and forwards
- * every keystroke in real time. The editable is kept empty so the IME never re-composes old text.
+ * every keystroke in real time. It remembers what it typed since the PC's caret last moved, as the text
+ * before the caret, so the keyboard can look back and re-edit the word it just typed.
  */
 final class KeyInputView extends View {
     interface Sink {
@@ -63,18 +64,20 @@ final class KeyInputView extends View {
     void resetComposition() {
         if (!predictive) return;
         RemoteInputConnection ic = current;
-        if (ic != null) ic.composing = "";
+        if (ic != null) ic.forget();
         post(this::restartInput); // never restart from inside an IME callback
     }
 
     private RemoteInputConnection current;
 
+    /** Keys after which the text before the PC's caret is no longer what the keyboard typed. */
     private static boolean movesCaret(int kc) {
         switch (kc) {
             case KeyEvent.KEYCODE_DPAD_LEFT: case KeyEvent.KEYCODE_DPAD_RIGHT: case KeyEvent.KEYCODE_DPAD_UP:
             case KeyEvent.KEYCODE_DPAD_DOWN: case KeyEvent.KEYCODE_MOVE_HOME: case KeyEvent.KEYCODE_MOVE_END:
             case KeyEvent.KEYCODE_PAGE_UP: case KeyEvent.KEYCODE_PAGE_DOWN: case KeyEvent.KEYCODE_TAB:
             case KeyEvent.KEYCODE_ESCAPE:
+            case KeyEvent.KEYCODE_ENTER: case KeyEvent.KEYCODE_NUMPAD_ENTER: // a new line, or the text was sent
                 return true;
             default:
                 return false;
@@ -115,10 +118,17 @@ final class KeyInputView extends View {
     @Override
     public boolean onKeyMultiple(int keyCode, int repeatCount, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_UNKNOWN && event.getCharacters() != null) {
-            if (sink != null) sink.typeText(event.getCharacters());
+            if (sink != null) typeKeys(event.getCharacters());
             return true;
         }
         return super.onKeyMultiple(keyCode, repeatCount, event);
+    }
+
+    /** Text from keys (not from the keyboard's text calls): typed, and remembered as text before the caret. */
+    private void typeKeys(String s) {
+        sink.typeText(s);
+        RemoteInputConnection ic = current;
+        if (ic != null) ic.typedByKey(s);
     }
 
     boolean handleKey(KeyEvent e) {
@@ -130,22 +140,25 @@ final class KeyInputView extends View {
         }
         boolean down = e.getAction() == KeyEvent.ACTION_DOWN;
         if (e.getAction() == KeyEvent.ACTION_MULTIPLE) {
-            if (kc == KeyEvent.KEYCODE_UNKNOWN && e.getCharacters() != null) sink.typeText(e.getCharacters());
+            if (kc == KeyEvent.KEYCODE_UNKNOWN && e.getCharacters() != null) typeKeys(e.getCharacters());
             return true;
         }
         int vk = keycodeToVk(kc);
         boolean special = isSpecial(kc);
         boolean hwModifiers = e.isCtrlPressed() || e.isAltPressed() || e.isMetaPressed();
-        if (down && (movesCaret(kc) || hwModifiers)) resetComposition();
+        // a shortcut (Ctrl+V, Ctrl+Backspace...) changes the PC's text in ways the keyboard can't follow
+        if (down && (movesCaret(kc) || hwModifiers || sink.modifiersActive())) resetComposition();
         if (!special && !hwModifiers && !sink.modifiersActive()) {
             int uc = e.getUnicodeChar(e.getMetaState());
             if (uc != 0 && (uc & KeyCharacterMapCombining) == 0) {
-                if (down) sink.typeText(new String(Character.toChars(uc)));
+                if (down) typeKeys(new String(Character.toChars(uc)));
                 return true;
             }
         }
         if (vk != 0) {
             sink.keyEvent(vk, down);
+            RemoteInputConnection ic = current;
+            if (down && vk == Vk.BACK && ic != null) ic.backspacedByKey();
             return true;
         }
         return false;
@@ -227,10 +240,18 @@ final class KeyInputView extends View {
 
     // ------------------------------------------------------------------ input connection
 
-    /** Turns IME commits / composing updates into keystrokes; never stores text. */
+    /**
+     * Turns IME commits / composing updates into keystrokes. Like a text field, it knows the text before the
+     * caret: what it typed since it began (the PC's caret stays at its end). Keyboards look back at it and may
+     * re-edit the last word: Samsung's, for a letter typed right after "word.", marks "word." as composing again
+     * (setComposingRegion) and then sends "word.e". Only the keystrokes that differ reach the PC.
+     */
     private static final class RemoteInputConnection extends BaseInputConnection {
+        private static final int KEEP = 1000; // chars of text kept before the caret (trimmed at twice that)
         private final KeyInputView owner;
-        private String composing = "";
+        private final StringBuilder text = new StringBuilder(); // the text before the PC's caret, as typed here
+        private int dropped;                                    // older chars dropped from its front
+        private int composeStart = -1;                          // the composing text is text[composeStart..]; -1: none
 
         RemoteInputConnection(KeyInputView v) {
             super(v, false);
@@ -239,59 +260,124 @@ final class KeyInputView extends View {
 
         private Sink sink() { return owner.sink; }
 
-        /** Diff what is on the PC (current composing text) against the new text. */
+        /** The PC's caret moved: the text before it is unknown. */
+        void forget() {
+            text.setLength(0);
+            dropped = 0;
+            composeStart = -1;
+        }
+
+        /** Makes the composing text (or, with none, new text at the caret) newText: only the keystrokes that differ. */
         private void replaceComposing(String newText) {
+            int from = composeStart >= 0 ? composeStart : text.length();
+            String old = text.substring(from);
             Sink s = sink();
-            if (s == null) return;
-            String old = composing;
-            int p = 0;
-            int max = Math.min(old.length(), newText.length());
-            while (p < max && old.charAt(p) == newText.charAt(p)) p++;
-            if (p > 0 && p < old.length() && Character.isLowSurrogate(old.charAt(p))) p--; // don't split a pair
-            int remove = old.codePointCount(p, old.length());
-            for (int i = 0; i < remove; i++) s.keyTap(Vk.BACK);
-            String add = newText.substring(p);
-            if (!add.isEmpty()) s.typeText(add);
+            if (s != null) {
+                int p = 0;
+                int max = Math.min(old.length(), newText.length());
+                while (p < max && old.charAt(p) == newText.charAt(p)) p++;
+                if (p > 0 && p < old.length() && Character.isLowSurrogate(old.charAt(p))) p--; // don't split a pair
+                int remove = old.codePointCount(p, old.length());
+                for (int i = 0; i < remove; i++) s.keyTap(Vk.BACK);
+                String add = newText.substring(p);
+                if (!add.isEmpty()) s.typeText(add);
+            }
+            text.setLength(from);
+            text.append(newText);
+        }
+
+        /** Keeps the last KEEP chars (and all of the composing text). */
+        private void trim() {
+            if (text.length() <= 2 * KEEP) return;
+            int cut = text.length() - KEEP;
+            if (composeStart >= 0) cut = Math.min(cut, composeStart);
+            if (cut > 0 && Character.isLowSurrogate(text.charAt(cut))) cut--; // don't split a pair
+            text.delete(0, cut);
+            dropped += cut;
+            if (composeStart >= 0) composeStart -= cut;
         }
 
         @Override
-        public boolean commitText(CharSequence text, int newCursorPosition) {
-            replaceComposing(text == null ? "" : text.toString());
-            composing = "";
+        public boolean commitText(CharSequence t, int newCursorPosition) {
+            replaceComposing(t == null ? "" : t.toString());
+            composeStart = -1;
+            trim();
             return true;
         }
 
         @Override
-        public boolean setComposingText(CharSequence text, int newCursorPosition) {
-            String t = text == null ? "" : text.toString();
-            replaceComposing(t);
-            composing = t;
+        public boolean setComposingText(CharSequence t, int newCursorPosition) {
+            String s = t == null ? "" : t.toString();
+            int from = composeStart >= 0 ? composeStart : text.length();
+            replaceComposing(s);
+            composeStart = s.isEmpty() ? -1 : from;
+            trim();
             return true;
         }
 
         @Override
         public boolean setComposingRegion(int start, int end) {
-            return false; // we keep no text, so there is nothing to re-compose
+            int a = Math.min(start, end) - dropped, b = Math.max(start, end) - dropped;
+            if (a == b) { // an empty region: nothing is composing
+                composeStart = -1;
+                return true;
+            }
+            // Keystrokes only reach the PC at its caret, so only text that ends there can be re-edited (and only
+            // text still kept here).
+            if (a < 0 || b != text.length()) return false;
+            composeStart = a;
+            return true;
         }
 
         @Override
         public boolean finishComposingText() {
-            composing = "";
+            composeStart = -1;
             return true;
         }
 
         @Override
         public boolean deleteSurroundingText(int beforeLength, int afterLength) {
-            Sink s = sink();
-            if (s == null) return true;
-            for (int i = 0; i < beforeLength; i++) s.keyTap(Vk.BACK);
-            for (int i = 0; i < afterLength; i++) s.keyTap(Vk.DELETE);
+            int known = Math.min(Math.max(beforeLength, 0), text.length()); // in chars
+            int presses = text.codePointCount(text.length() - known, text.length()) + Math.max(beforeLength - known, 0);
+            deleteBefore(known, beforeLength - known, presses, afterLength);
             return true;
         }
 
         @Override
         public boolean deleteSurroundingTextInCodePoints(int beforeLength, int afterLength) {
-            return deleteSurroundingText(beforeLength, afterLength);
+            int points = Math.min(Math.max(beforeLength, 0), text.codePointCount(0, text.length()));
+            int known = text.length() - text.offsetByCodePoints(text.length(), -points); // in chars
+            deleteBefore(known, beforeLength - points, Math.max(beforeLength, 0), afterLength);
+            return true;
+        }
+
+        /** Backspaces (one per character on the PC) and Deletes; known chars of the text before the caret go, then older ones. */
+        private void deleteBefore(int known, int older, int presses, int afterLength) {
+            Sink s = sink();
+            if (s != null) {
+                for (int i = 0; i < presses; i++) s.keyTap(Vk.BACK);
+                for (int i = 0; i < afterLength; i++) s.keyTap(Vk.DELETE);
+            }
+            text.setLength(text.length() - known);
+            if (composeStart >= text.length()) composeStart = -1; // its text is gone
+            if (older > 0) dropped = Math.max(dropped - older, 0);
+        }
+
+        /** Text typed by keys at the caret: after it, a composing text no longer ends at the caret. */
+        void typedByKey(String s) {
+            composeStart = -1;
+            text.append(s);
+            trim();
+        }
+
+        /** Backspace pressed as a key. */
+        void backspacedByKey() {
+            if (text.length() > 0) {
+                text.setLength(text.offsetByCodePoints(text.length(), -1));
+                if (composeStart >= text.length()) composeStart = -1;
+            } else if (dropped > 0) {
+                dropped--;
+            }
         }
 
         @Override
@@ -303,6 +389,7 @@ final class KeyInputView extends View {
         public boolean performEditorAction(int actionCode) {
             Sink s = sink();
             if (s != null) s.keyTap(Vk.RETURN);
+            owner.resetComposition(); // as with the Enter key
             return true;
         }
 
@@ -330,7 +417,9 @@ final class KeyInputView extends View {
 
         @Override
         public CharSequence getTextBeforeCursor(int n, int flags) {
-            return composing.length() <= n ? composing : composing.substring(composing.length() - n);
+            int len = text.length();
+            if (n <= 0) return "";
+            return n >= len ? text.toString() : text.substring(len - n);
         }
 
         @Override

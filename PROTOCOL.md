@@ -174,7 +174,7 @@ the PC). Older clients stop reading after the addresses.
 | 0x91 | VIDEO_FRAME | H→C | `u32 frameId u8 flags(bit0 keyframe) u64 timestampUs tail annexB` |
 | 0x92 | CURSOR_SHAPE | H→C | `u32 shapeId u16 w u16 h u16 hotX u16 hotY tail rgba` (w·h·4 bytes, straight alpha, row-major) |
 | 0x93 | CURSOR_STATE | H→C | `i32 x i32 y u8 visible u32 shapeId` |
-| 0x94 | HOST_STATUS | H→C | `u8 flags str message` (bit0 SECURE_DESKTOP: lock screen/UAC can't be captured; bit1 NO_SIGNAL: capture failing) |
+| 0x94 | HOST_STATUS | H→C | `u8 flags str message` (bit0 SECURE_DESKTOP: lock screen/UAC can't be captured; bit1 NO_SIGNAL: capture failing, e.g. no screen is on). Sent again whenever the flags or the message change (host 2.6+; before, only the flags) |
 
 Video rules
 * H.264 Annex-B (`00 00 00 01` start codes), no B-frames. Every keyframe carries SPS+PPS+IDR in the same message.

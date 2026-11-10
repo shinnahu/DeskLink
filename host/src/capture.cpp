@@ -8,6 +8,7 @@
 #include <climits>
 
 #include "protocol.h"
+#include "vdisplay.h"
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -129,8 +130,9 @@ int Streamer::Window() {
 }
 
 void Streamer::SendStatus(uint8_t flags, const std::string& text) {
-  if (flags == statusFlags_) return;
+  if (flags == statusFlags_ && text == statusText_) return;
   statusFlags_ = flags;
+  statusText_ = text;
   Writer w(msg::HOST_STATUS);
   w.u8(flags).str(text);
   sink_->SendStream(std::move(w.b));
@@ -237,8 +239,15 @@ bool Streamer::BuildPipeline(std::string& why, uint8_t& flags, int attempt, int&
     ComPtr<IDXGIOutput1> o;
     RECT r;
     bool primary;
+    bool virt;  // DeskLink's virtual screen (vdisplay.h)
+    std::wstring gdi;
   };
+  bool noScreen = false;  // test: as if every monitor were switched off
+#ifdef DESKLINK_TESTING
+  noScreen = g_opt.testNoScreen;
+#endif
   std::vector<Out> outs;
+  int ghosts = 0;
   ComPtr<IDXGIAdapter1> a;
   for (UINT ai = 0; factory->EnumAdapters1(ai, &a) != DXGI_ERROR_NOT_FOUND; ai++) {
     DXGI_ADAPTER_DESC1 ad{};
@@ -256,12 +265,34 @@ bool Streamer::BuildPipeline(std::string& why, uint8_t& flags, int attempt, int&
       o.As(&x.o);
       x.r = d.DesktopCoordinates;
       x.primary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
+      x.virt = vscreen::IsVirtual(d.DeviceName);
+      x.gdi = d.DeviceName;
+      if (noScreen && !x.virt) continue;
+      // the last monitor switched off or unplugged: Windows keeps its screen on the desktop with nothing behind it,
+      // and draws nothing to it, so no frames would ever come
+      if (!x.virt && !vscreen::HasMonitor(d.DeviceName)) {
+        ghosts++;
+        continue;
+      }
       if (x.o) outs.push_back(x);
     }
   }
+  if (ghosts != ghostsLogged_) {
+    ghostsLogged_ = ghosts;
+    if (ghosts) Log("capture: %d screen(s) left out: their monitor is off or unplugged", ghosts);
+  }
   if (outs.empty()) {
-    why = IsInputDesktopSecure() ? "The PC is locked or showing an administrator prompt." : "No display is active on the PC.";
-    flags = IsInputDesktopSecure() ? hoststatus::SECURE_DESKTOP : hoststatus::NO_SIGNAL;
+    // No screen at all: the monitor is switched off (a DisplayPort monitor tells Windows it was unplugged) or
+    // unplugged, so Windows draws no desktop. A virtual screen gives it one to draw on.
+    switch (vscreen::Ensure(noScreen)) {
+      case vscreen::State::Starting: why = "The PC's monitor is off. Starting a virtual screen…"; break;
+      case vscreen::State::Waiting: why = "The PC's monitor is turning on…"; break;
+      case vscreen::State::Failed: why = "The PC's monitor is off, and the virtual screen didn't start."; break;
+      default:
+        why = "The PC's monitor is off or unplugged. Turn it on, or install the virtual display driver on the PC "
+              "(see DeskLink's README).";
+    }
+    flags = hoststatus::NO_SIGNAL;
     return false;
   }
 #ifdef DESKLINK_TESTING
@@ -321,6 +352,8 @@ bool Streamer::BuildPipeline(std::string& why, uint8_t& flags, int attempt, int&
   if (!all) {
     Source s;
     s.rect = sel.r;
+    s.gdi = sel.gdi;
+    s.virt = sel.virt;
     s.dev = dev_;
     s.ctx = ctx_;
     hr = Duplicate(sel.o.Get(), dev_.Get(), s.dupl);
@@ -355,6 +388,8 @@ bool Streamer::BuildPipeline(std::string& why, uint8_t& flags, int attempt, int&
       Out& o = outs[i];
       Source s;
       s.rect = o.r;
+      s.gdi = o.gdi;
+      s.virt = o.virt;
       s.ox = o.r.left - box.left;
       s.oy = o.r.top - box.top;
       bool mirror = false;
@@ -598,8 +633,8 @@ bool Streamer::BuildPipeline(std::string& why, uint8_t& flags, int attempt, int&
     Log("capture: all %zu screens (%ld,%ld %dx%d, %d through the CPU) -> %dx%d @%d fps, %s", srcs_.size(),
         monRect_.left, monRect_.top, deskW, deskH, viaCpu, encW_, encH_, fps_, enc_.name().c_str());
   } else {
-    Log("capture: monitor %d (%ld,%ld %dx%d) -> %dx%d @%d fps, %s", monIndex_, monRect_.left, monRect_.top, deskW,
-        deskH, encW_, encH_, fps_, enc_.name().c_str());
+    Log("capture: monitor %d (%ld,%ld %dx%d%s) -> %dx%d @%d fps, %s", monIndex_, monRect_.left, monRect_.top, deskW,
+        deskH, sel.virt ? ", virtual screen" : "", encW_, encH_, fps_, enc_.name().c_str());
   }
   return true;
 }
@@ -863,10 +898,12 @@ void Streamer::Run() {
   MFStartup(MF_VERSION, MFSTARTUP_LITE);
   SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
   if (g_opt.systemMode) desk_.Sync();
+  vscreen::Hold();  // a virtual screen put in while there's no screen stays while this stream runs
 
   bool havePending = false, pendingKey = true, everEncoded = false;
   int topOff = 0;
   uint64_t lastEncodeMs = 0, lastChangeMs = 0, pausedSince = 0, lastInitAttempt = 0, lastLoopMs = NowMs();
+  uint64_t lastMonitorCheck = 0;
 
   while (!stop_) {
     bool paused, reinit, key, cursorResend;
@@ -921,6 +958,23 @@ void Streamer::Run() {
     }
     if (key) pendingKey = true;
     if (cursorResend) ResendCursor();
+
+    // A monitor switched off while it's shown, or the virtual screen taken away by its driver: Windows stops drawing
+    // to that screen without telling the duplication, so it's looked for once a second. Without it the picture would
+    // freeze; this way a virtual screen comes in (a new one, when the driver took the last one away).
+    if (now - lastMonitorCheck >= 1000) {
+      lastMonitorCheck = now;
+      const char* gone = nullptr;
+      for (auto& s : srcs_)
+        if (s.dupl && !vscreen::HasMonitor(s.gdi.c_str()))
+          gone = s.virt ? "the virtual screen went away" : "a shown screen's monitor is off or unplugged";
+      if (gone) {
+        Log("capture: %s -> reinit", gone);
+        Teardown();
+        lastInitAttempt = 0;
+        continue;
+      }
+    }
 
     // Wait for a change on a screen (all screens: the one that changed last), then pick up the others' without
     // waiting.
@@ -993,6 +1047,7 @@ void Streamer::Run() {
     AdaptBitrate(now);
   }
   Teardown();
+  vscreen::Release();
   MFShutdown();
   CoUninitialize();
 }

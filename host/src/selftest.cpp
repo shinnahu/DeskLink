@@ -5,6 +5,7 @@
 #include "capture.h"
 #include "crypto.h"
 #include "protocol.h"
+#include "vdisplay.h"
 
 namespace {
 
@@ -19,6 +20,8 @@ class FileSink : public StreamSink {
         int codec = r.u8(), w = r.u16(), h = r.u16(), mon = r.u8();
         int dl = r.i32(), dt = r.i32(), dw = r.i32(), dh = r.i32();
         Log("selftest: VIDEO_FORMAT codec=%d %dx%d monitor=%d desktop=%d,%d %dx%d", codec, w, h, mon, dl, dt, dw, dh);
+        formats++;
+        framesAtFormat = frames;
         break;
       }
       case msg::VIDEO_FRAME: {
@@ -67,6 +70,7 @@ class FileSink : public StreamSink {
   std::mutex mu;
   std::vector<uint32_t> pendingAcks;
   uint64_t frames = 0, bytes = 0, keys = 0, cursorMsgs = 0;
+  uint64_t formats = 0, framesAtFormat = 0;  // pictures (re)started, and the frames before the last one started
 };
 
 }  // namespace
@@ -88,6 +92,11 @@ int RunCaptureSelfTest(int seconds, const std::wstring& out, int maxW, int maxH,
   s.Start(p);
   uint64_t end = NowMs() + (uint64_t)seconds * 1000;
   uint64_t nextKey = NowMs() + 1500;
+  // --test-drop-virtual: part way through, the virtual screen is taken away as its driver might; the picture must
+  // come back (a new virtual screen)
+  uint64_t dropAt = g_opt.testDropVirtualAt > 0 ? NowMs() + (uint64_t)g_opt.testDropVirtualAt * 1000 : 0;
+  uint64_t formatsAtDrop = 0;
+  bool dropped = false;
   while (NowMs() < end) {
     Sleep(5);
     std::vector<uint32_t> acks;
@@ -100,13 +109,24 @@ int RunCaptureSelfTest(int seconds, const std::wstring& out, int maxW, int maxH,
       s.RequestKeyframe();
       nextKey += 1500;
     }
+    if (dropAt && NowMs() >= dropAt) {
+      dropAt = 0;
+      formatsAtDrop = sink.formats;
+      dropped = vscreen::SimulateDrop();
+      Log("selftest: the virtual screen taken away, as by its driver: %s (%llu frames so far)",
+          dropped ? "done" : "there was none", sink.frames);
+    }
   }
   StreamStats st = s.Stats();
   s.Stop();
   fclose(f);
   Log("selftest: done frames=%llu keys=%llu bytes=%llu cursorMsgs=%llu encoder=%s kbps=%d", sink.frames, sink.keys,
       sink.bytes, sink.cursorMsgs, st.encoder.c_str(), st.kbps);
-  return sink.frames > 0 ? 0 : 1;
+  bool back = !dropped || (sink.formats > formatsAtDrop && sink.frames > sink.framesAtFormat);
+  if (dropped)
+    Log("selftest: after the virtual screen was taken away: %s (%llu frames since the picture restarted)",
+        back ? "the picture came back" : "NO PICTURE AGAIN", sink.formats > formatsAtDrop ? sink.frames - sink.framesAtFormat : 0);
+  return sink.frames > 0 && back ? 0 : 1;
 }
 
 // ---------------------------------------------------------------- home or internet
@@ -316,5 +336,84 @@ int RunInputSelfTest() {
     fails++;
   }
   Log("inputtest: %zu events captured, %d failure(s)", g_recs.size(), fails);
+  return fails == 0 ? 0 : 1;
+}
+
+// ---------------------------------------------------------------- virtual screen
+// Needs Parsec's virtual display driver. A virtual screen is put in beside the monitor and the pings keep it; taken
+// away by the driver, it's replaced. Then it goes again: because a monitor is on (it stays while forced), and 30 s
+// after the last stream ended.
+namespace {
+bool WaitUntil(uint64_t ms, const std::function<bool()>& done) {
+  for (uint64_t end = NowMs() + ms; NowMs() < end; Sleep(100))
+    if (done()) return true;
+  return done();
+}
+
+void DescribeVirtual() {
+  std::wstring n = vscreen::VirtualOnDesktop();
+  DEVMODEW dm{};
+  dm.dmSize = sizeof(dm);
+  if (!n.empty() && EnumDisplaySettingsW(n.c_str(), ENUM_CURRENT_SETTINGS, &dm))
+    Log("vstest: virtual screen %s at %ld,%ld, %lux%lu @%lu Hz", W2U(n).c_str(), dm.dmPosition.x, dm.dmPosition.y,
+        dm.dmPelsWidth, dm.dmPelsHeight, dm.dmDisplayFrequency);
+}
+}  // namespace
+
+int RunVirtualScreenSelfTest() {
+  if (!vscreen::Installed()) {
+    Log("vstest: Parsec's virtual display driver isn't installed");
+    return 2;
+  }
+  auto on = [] { return !vscreen::VirtualOnDesktop().empty(); };
+  int fails = 0;
+  auto check = [&](bool ok, const char* what) {
+    Log("vstest: %s: %s", what, ok ? "OK" : "FAILED");
+    if (!ok) fails++;
+    return ok;
+  };
+  vscreen::Hold();  // as a stream does
+  // 1. in, beside the monitor (forced: a monitor that's on would send it away)
+  uint64_t t = NowMs();
+  if (!check(vscreen::Ensure(true) == vscreen::State::Starting, "the driver adds a screen")) return 1;
+  if (check(WaitUntil(10000, on), "Windows puts it on the desktop")) {
+    Log("vstest: on the desktop after %llu ms", NowMs() - t);
+    DescribeVirtual();
+  }
+  // 2. the pings keep it (without them the driver takes it away after about a second)
+  Sleep(3000);
+  check(on(), "still there after 3 s");
+  // 3. the driver takes it away by itself (as when the pings came late): that's noticed and a new one is put in
+  t = NowMs();
+  if (check(vscreen::SimulateDrop(), "the driver takes it away (simulated)")) {
+    if (check(WaitUntil(5000, [&] { return !on(); }), "it leaves the desktop"))
+      Log("vstest: off the desktop %llu ms after that", NowMs() - t);
+    // as the capture does while it has no screen: asks for one again and again
+    if (check(WaitUntil(15000, [&] { vscreen::Ensure(true); return on(); }), "a new one is put in"))
+      Log("vstest: a new one on the desktop %llu ms after the old one was taken away", NowMs() - t);
+  }
+  // 4. a monitor that's on sends it away after 2 s
+  if (vscreen::RealMonitorOnDesktop()) {
+    t = NowMs();
+    vscreen::Unpin();
+    if (check(WaitUntil(6000, [&] { return !on(); }), "a monitor that's on sends it away"))
+      Log("vstest: gone %llu ms after that", NowMs() - t);
+  } else {
+    Log("vstest: no monitor is on: step 3 skipped");
+  }
+  // 5. in again, then the stream ends: it stays 30 s, then goes
+  t = NowMs();
+  if (check(vscreen::Ensure(true) == vscreen::State::Starting, "the driver adds a screen again") &&
+      check(WaitUntil(10000, on), "Windows puts it on the desktop again")) {
+    Log("vstest: on the desktop after %llu ms", NowMs() - t);
+    vscreen::Release();
+    t = NowMs();
+    Sleep(25000);
+    check(on(), "still there 25 s after the stream ended");
+    if (check(WaitUntil(10000, [&] { return !on(); }), "gone about 30 s after the stream ended"))
+      Log("vstest: gone %llu ms after the stream ended", NowMs() - t);
+  }
+  vscreen::RemoveNow();
+  Log("vstest: %d failure(s)", fails);
   return fails == 0 ? 0 : 1;
 }

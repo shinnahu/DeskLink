@@ -110,7 +110,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     private final Map<Integer, Messages.CursorShape> shapes = new HashMap<>();
     private int shapeId = -1;
     private Ui.Bars bars = new Ui.Bars();
-    private boolean imeVisible, barPinned, fullScreen, weak, toolbarShown = true, barWasVisible;
+    private boolean imeVisible, barShown, fullScreen, weak, toolbarShown = true, barWasVisible;
     private boolean touching;
     private long lastTouchMs;
     private int hostStatusFlags;
@@ -186,7 +186,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         touch.pointerSpeed = Prefs.pointerSpeedFactor(prefs.pointerSpeed());
         touch.cameraSpeed = Prefs.cameraSpeedFactor(prefs.cameraSpeed());
         touch.glide = Prefs.glideDistance(prefs.glide());
-        barPinned = prefs.alwaysShowBar();
+        barShown = prefs.showBar();
         fullScreen = prefs.fullScreen();
         gamepad = new Gamepad(this);
         padEditor = new GamepadEditor(this, gamepad, this);
@@ -429,16 +429,16 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         return b;
     }
 
-    /** Toggle look of the bar button (highlighted while the bar is pinned) and keyboard / hide-keyboard icon. */
+    /** Toggle look of the bar button (highlighted while the bar is shown) and keyboard / hide-keyboard icon. */
     private void refreshDock() {
         if (btnBar == null) return;
         int r = Ui.dp(this, 12);
-        btnBar.setImageTintList(ColorStateList.valueOf(Ui.color(this, barPinned ? R.color.accent : R.color.text)));
-        btnBar.setBackground(barPinned
+        btnBar.setImageTintList(ColorStateList.valueOf(Ui.color(this, barShown ? R.color.accent : R.color.text)));
+        btnBar.setBackground(barShown
                 ? Ui.ripple(new InsetDrawable(Ui.rounded(0x473B82F6, r), Ui.dp(this, 4)), r)
                 : Ui.borderlessRipple());
-        btnBar.setSelected(barPinned);
-        String bar = getString(barPinned ? R.string.bar_unpin : R.string.bar_pin);
+        btnBar.setSelected(barShown);
+        String bar = getString(barShown ? R.string.bar_hide : R.string.bar_show);
         btnBar.setContentDescription(bar);
         btnKeyboard.setImageResource(imeVisible ? R.drawable.ic_keyboard_hide : R.drawable.ic_keyboard);
         String kb = getString(imeVisible ? R.string.tb_keyboard_hide : R.string.tb_keyboard);
@@ -592,8 +592,8 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         HostConnection c = session != null ? session.connection() : null;
         if (c != null) c.selectMonitor(index);
         refreshScreenButtons();
-        // which one, briefly (unless a file is on its way: its progress is in the same place)
-        if (!uploading && downloads.isEmpty()) showSnack(screenName(index), -1, null, null, 1500);
+        // which one, briefly (unless a file is on its way: its progress is in the same place; or Short notes is off)
+        if (prefs.tapNotes() && !uploading && downloads.isEmpty()) showSnack(screenName(index), -1, null, null, 1500);
     }
 
     /** The PC's screens left to right (then top to bottom), as Windows arranges them. */
@@ -725,11 +725,12 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         boolean inSession = state != RemoteSession.State.ENDED && state != RemoteSession.State.FAILED;
         // keyboard sliding away: the bar rides it down and collapses when it's gone (onEnd)
         boolean closing = imeAnimating && !imeVisible && imeAnimStart > 0;
-        // Gaming mode: the gamepad's buttons sit in the bottom corners, so the dock and a pinned bar step aside
+        // Gaming mode: the gamepad's buttons sit in the bottom corners, so the dock and the bar step aside
         // (the keyboard still brings the bar, with the three-finger swipe)
         boolean gaming = gamepad.enabled() && inSession;
-        // pinned = stays until the user turns it off: no timer, no hiding with the keyboard or on reconnects
-        boolean barVisible = imeVisible || closing || (barPinned && inSession && !gaming);
+        // the bar's button: on = shown until the user turns it off (no timer, no hiding on reconnects); off = never,
+        // not even with the keyboard (the corner buttons stay, to bring it back)
+        boolean barVisible = barShown && (imeVisible || closing || (inSession && !gaming));
         if (!barVisible && barWasVisible) shortcutBar.releaseAll(); // never leave Ctrl/Shift/Alt/Win latched out of sight
         barWasVisible = barVisible;
         boolean dockVisible = barVisible || (inSession && !gaming);
@@ -1423,13 +1424,13 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         layoutChrome();
     }
 
-    /** Pins / unpins the shortcut bar. Pinned = on screen until turned off, keyboard open or not. */
+    /** Shows / hides the shortcut bar. Shown = on screen until turned off, keyboard open or not; hidden = even with it. */
     private void toggleBar() {
-        barPinned = !barPinned;
-        prefs.setAlwaysShowBar(barPinned);
+        barShown = !barShown;
+        prefs.setShowBar(barShown);
         refreshDock();
         layoutChrome();
-        showSnack(getString(barPinned ? R.string.bar_pinned : R.string.bar_unpinned), -1, null, null, 2000);
+        if (prefs.tapNotes()) showSnack(getString(barShown ? R.string.bar_shown : R.string.bar_hidden), -1, null, null, 2000);
     }
 
     // =================================================================== settings (one page over the session)
@@ -1532,7 +1533,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
                 break;
             }
             default:
-                break; // the fingerprint lock needs nothing here
+                break; // the fingerprint lock and Short notes need nothing here (notes check it each time)
         }
     }
 
@@ -1913,6 +1914,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         if (gaming && !was && imeVisible) hideKeyboard(); // the gamepad needs the room; three fingers up brings it back
         refreshModeButton();
         layoutChrome();
+        if (!prefs.tapNotes()) return;
         String note = gaming ? getString(R.string.gp_on, gamepad.active().name)
                 : getString(m == MODE_DIRECT ? R.string.mode_switched_direct : R.string.mode_switched_trackpad);
         showSnack(note, -1, null, null, gaming ? 3000 : 1800);

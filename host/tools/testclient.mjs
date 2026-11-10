@@ -88,7 +88,13 @@ function send(c, type, ...parts) {
   ci.setAAD(len);
   c.write(Buffer.concat([len, ci.update(pt), ci.final(), ci.getAuthTag()]));
 }
-async function recv(c) {
+// One message read at a time. A wait that times out leaves its read running, and the next recv() gets that message:
+// nothing is lost, and the reads of two messages never interleave (that would put the stream out of step).
+function recv(c) {
+  if (!c.pending) c.pending = readMessage(c).finally(() => { c.pending = null; });
+  return c.pending;
+}
+async function readMessage(c) {
   const lenb = await c.read(4);
   const len = lenb.readUInt32BE(0);
   const data = await c.read(len);

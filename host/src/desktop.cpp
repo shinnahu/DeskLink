@@ -3,6 +3,8 @@
 #include <dxgi1_2.h>
 #include <wrl/client.h>
 
+#include "vdisplay.h"
+
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "user32.lib")
 
@@ -62,6 +64,10 @@ std::vector<MonitorDesc> ListMonitors() {
       DXGI_OUTPUT_DESC d{};
       o->GetDesc(&d);
       if (!d.AttachedToDesktop) continue;
+#ifdef DESKLINK_TESTING
+      if (g_opt.testNoScreen && !vscreen::IsVirtual(d.DeviceName)) continue;  // as the capture sees it
+#endif
+      if (!vscreen::IsVirtual(d.DeviceName) && !vscreen::HasMonitor(d.DeviceName)) continue;  // its monitor is gone
       MONITORINFOEXW mi{};
       mi.cbSize = sizeof(mi);
       GetMonitorInfoW(d.Monitor, &mi);

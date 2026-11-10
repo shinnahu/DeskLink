@@ -98,7 +98,7 @@ public class PreviewShots {
 
     @Test
     public void session() throws Exception {
-        new Prefs(ctx).setAlwaysShowBar(true); // the shortcut bar stays on screen
+        new Prefs(ctx).setShowBar(true); // the shortcut bar is shown
         SessionActivity a = live(false, true);
         shoot(a, "phone-session.png", picture("desk-one.png"));
     }
