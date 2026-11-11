@@ -62,6 +62,11 @@ final class Prefs {
 
     void setFullScreen(boolean v) { sp.edit().putBoolean("fullScreen", v).apply(); }
 
+    /** The PC's sound plays on the phone (PCs with DeskLink 2.7 or later). */
+    boolean sound() { return sp.getBoolean("sound", true); }
+
+    void setSound(boolean v) { sp.edit().putBoolean("sound", v).apply(); }
+
     /** The shortcut bar's button: on = the bar is shown, keyboard open or not; off = never shown. */
     boolean showBar() { return sp.getBoolean("showBar", true); }
 

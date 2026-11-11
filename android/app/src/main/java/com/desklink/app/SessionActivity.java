@@ -103,6 +103,8 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     private final Viewport viewport = new Viewport();
     private TouchInput touch;
     private volatile VideoDecoder decoder;
+    private final AudioPlayer audio = new AudioPlayer(); // the PC's sound
+    private boolean noSoundShown; // "The PC has no sound output" was said (again once there was sound)
     private Surface surface;
     private Messages.VideoFormat format;          // main thread
     private volatile Messages.VideoFormat netFormat; // network thread (detects format changes)
@@ -160,6 +162,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         AppLock.install(this); // the optional fingerprint lock
+        setVolumeControlStream(android.media.AudioManager.STREAM_MUSIC); // the volume keys set the PC's sound
         store = new HostStore(this);
         prefs = new Prefs(this);
         hostId = getIntent().getStringExtra(EXTRA_HOST_ID);
@@ -222,6 +225,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
             session.onBackground();     // then RELEASE_ALL + STREAM_PAUSE
         }
         stopDecoder();
+        audio.stop(); // the PC stops its sound with the stream, and says its format again when it resumes
     }
 
     @Override
@@ -231,6 +235,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         if (touch != null) touch.reset(); // stops a pointer glide
         if (session != null) session.stop();
         stopDecoder();
+        audio.stop();
         if (Build.VERSION.SDK_INT >= 33 && backCallback != null) {
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) backCallback);
         }
@@ -875,6 +880,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
             shortcutBar.resetSilently();
             pad.resetSilently();
             touch.reset();
+            audio.stop(); // a new stream says its sound format again
         }
         if (s == RemoteSession.State.LIVE && !padLabelsShown) {
             // opened in Gaming mode: the names show (and fade) once the picture is there, not behind "Connecting…"
@@ -1058,12 +1064,36 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         if (clipSync != null) clipSync.restart();
         checkClipboard(c);
         int[] dec = VideoDecoder.maxSize(); // a picture of all the PC's screens stays within what this phone decodes
-        c.startStream(monitorIndex, p[0], p[1], p[2], p[3], prefs.clipboardSync(), dec[0], dec[1]);
+        c.startStream(monitorIndex, p[0], p[1], p[2], p[3], prefs.clipboardSync(), soundWanted(), dec[0], dec[1]);
         statsBytes = -1;
         startNextUpload();
     }
 
+    /** The PC's sound is asked for: the setting is on and the PC can send it (DeskLink 2.7). */
+    private boolean soundWanted() {
+        Messages.HostInfo i = hostInfo;
+        return prefs.sound() && i != null && i.can(Protocol.CAP_AUDIO);
+    }
+
     // =================================================================== HostConnection.Listener (network thread)
+
+    @Override
+    public void onAudioFormat(Messages.AudioFormat f) {
+        boolean none = f.codec == Protocol.AUDIO_CODEC_NONE;
+        if (none) audio.stop();
+        else if (prefs.sound()) audio.start(f);
+        main.post(() -> {
+            if (none && !noSoundShown && !isFinishing()) {
+                showSnack(getString(R.string.note_no_sound), -1, null, null, 6000);
+            }
+            noSoundShown = none;
+        });
+    }
+
+    @Override
+    public void onAudioData(long timestampUs, byte[] data, int off, int len) {
+        audio.feed(data, off, len);
+    }
 
     @Override
     public void onVideoFormat(Messages.VideoFormat f) {
@@ -1528,8 +1558,13 @@ public final class SessionActivity extends Activity implements HostConnection.Li
                 boolean v = prefs.clipboardSync();
                 // turning it on makes the PC send its clipboard; a newer copy on the phone wins over it
                 if (v && clipSync != null) clipSync.restart();
-                if (c != null) c.setOptions(v);
+                if (c != null) c.setOptions(v, soundWanted()); // every option at once
                 if (v) main.postDelayed(this::checkClipboard, 250);
+                break;
+            }
+            case SettingsScreen.K_SOUND: {
+                if (!prefs.sound()) audio.stop();
+                if (c != null) c.setOptions(prefs.clipboardSync(), soundWanted()); // on: the PC says its format
                 break;
             }
             default:
@@ -1978,11 +2013,15 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         long bytes = c != null ? c.bytesReceived() : 0;
         long delta = statsBytes >= 0 && bytes >= statsBytes ? bytes - statsBytes : 0;
         statsBytes = bytes;
+        String soundProblem = audio.takeProblem();
+        if (soundProblem != null) showSnack(soundProblem, -1, null, null, 8000);
         if (statsText.getVisibility() == View.VISIBLE) {
             String mbps = String.format(Locale.US, "%.1f", delta * 8 / 1_000_000.0);
             int w = format != null ? format.width : 0, h = format != null ? format.height : 0;
             String dec = decoder != null ? decoder.codecName() : "";
-            statsText.setText(getString(R.string.stats_fmt, fps, mbps, Math.max(0, rtt), w, h) + (dec.isEmpty() ? "" : "\n" + dec));
+            String sound = audio.started() ? audio.describe() : soundWanted() ? "sound: nothing from the PC yet" : "";
+            statsText.setText(getString(R.string.stats_fmt, fps, mbps, Math.max(0, rtt), w, h) + (dec.isEmpty() ? "" : "\n" + dec)
+                    + (sound.isEmpty() ? "" : "\n" + sound));
         }
     }
 }

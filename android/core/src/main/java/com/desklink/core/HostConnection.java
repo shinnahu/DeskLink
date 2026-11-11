@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.desklink.core.Messages.AudioFormat;
 import com.desklink.core.Messages.CursorShape;
 import com.desklink.core.Messages.HostInfo;
 import com.desklink.core.Messages.VideoFormat;
@@ -27,6 +28,10 @@ public final class HostConnection implements Closeable {
         default void onVideoFormat(VideoFormat format) {}
         /** {@code data[off..off+len)} is Annex-B; the array is not reused by the connection. */
         default void onVideoFrame(int frameId, boolean keyframe, long timestampUs, byte[] data, int off, int len) {}
+        /** The PC's sound: what the AUDIO_DATA frames that follow are (codec NONE: the PC has no sound output). */
+        default void onAudioFormat(AudioFormat format) {}
+        /** One AAC frame in {@code data[off..off+len)}; the array is not reused by the connection. */
+        default void onAudioData(long timestampUs, byte[] data, int off, int len) {}
         default void onCursorShape(CursorShape shape) {}
         default void onCursorState(int x, int y, boolean visible, int shapeId) {}
         default void onHostStatus(int flags, String message) {}
@@ -287,6 +292,15 @@ public final class HostConnection implements Closeable {
                 long ts = r.u64();
                 int off = r.position();
                 listener.onVideoFrame(id, (flags & 1) != 0, ts, m, off, m.length - off);
+                break;
+            }
+            case Protocol.AUDIO_FORMAT:
+                listener.onAudioFormat(AudioFormat.parse(r));
+                break;
+            case Protocol.AUDIO_DATA: {
+                long ts = r.u64();
+                int off = r.position();
+                listener.onAudioData(ts, m, off, m.length - off);
                 break;
             }
             case Protocol.CURSOR_SHAPE:
@@ -601,10 +615,21 @@ public final class HostConnection implements Closeable {
      */
     public void startStream(int monitor, int maxWidth, int maxHeight, int maxFps, int bitrateKbps, boolean clipboardSync,
                             int decoderMaxWidth, int decoderMaxHeight) {
+        startStream(monitor, maxWidth, maxHeight, maxFps, bitrateKbps, clipboardSync, false, decoderMaxWidth,
+                decoderMaxHeight);
+    }
+
+    /** audio: the PC's sound too (send it only to PCs with CAP_AUDIO; older ones ignore the flag anyway). */
+    public void startStream(int monitor, int maxWidth, int maxHeight, int maxFps, int bitrateKbps, boolean clipboardSync,
+                            boolean audio, int decoderMaxWidth, int decoderMaxHeight) {
         ByteWriter w = new ByteWriter(16).u8(Protocol.STREAM_START).u8(monitor).u16(maxWidth).u16(maxHeight).u8(maxFps)
-                .u32(bitrateKbps).u8(clipboardSync ? Protocol.STREAM_FLAG_CLIPBOARD : 0);
+                .u32(bitrateKbps).u8(streamFlags(clipboardSync, audio));
         if (decoderMaxWidth > 0 && decoderMaxHeight > 0) w.u16(decoderMaxWidth).u16(decoderMaxHeight);
         enqueue(w.toByteArray(), false);
+    }
+
+    private static int streamFlags(boolean clipboardSync, boolean audio) {
+        return (clipboardSync ? Protocol.STREAM_FLAG_CLIPBOARD : 0) | (audio ? Protocol.STREAM_FLAG_AUDIO : 0);
     }
 
     public void pauseStream() { enqueue(ByteWriter.msg(Protocol.STREAM_PAUSE), false); }
@@ -617,8 +642,11 @@ public final class HostConnection implements Closeable {
         enqueue(new ByteWriter(10).u8(Protocol.STREAM_CONFIG).u16(maxWidth).u16(maxHeight).u8(maxFps).u32(bitrateKbps).toByteArray(), false);
     }
 
-    public void setOptions(boolean clipboardSync) {
-        enqueue(new ByteWriter(2).u8(Protocol.SET_OPTIONS).u8(clipboardSync ? Protocol.STREAM_FLAG_CLIPBOARD : 0).toByteArray(), false);
+    public void setOptions(boolean clipboardSync) { setOptions(clipboardSync, false); }
+
+    /** Every option at once: one left out is turned off. */
+    public void setOptions(boolean clipboardSync, boolean audio) {
+        enqueue(new ByteWriter(2).u8(Protocol.SET_OPTIONS).u8(streamFlags(clipboardSync, audio)).toByteArray(), false);
     }
 
     public void selectMonitor(int index) {

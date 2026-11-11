@@ -1,6 +1,7 @@
 #pragma once
 #include <map>
 
+#include "audio.h"
 #include "capture.h"
 #include "channel.h"
 #include "common.h"
@@ -8,7 +9,7 @@
 #include "files.h"
 
 // One authenticated phone connection. Owns a reader thread (decrypt + dispatch) and a writer
-// thread (two queues: control/video first, file data second; periodic PING).
+// thread (three queues: sound first, then control/video, then file data; periodic PING).
 class Session : public StreamSink, public std::enable_shared_from_this<Session> {
  public:
   Session(std::unique_ptr<SecureChannel> ch, PairedDevice dev);
@@ -24,6 +25,7 @@ class Session : public StreamSink, public std::enable_shared_from_this<Session> 
 
   void SendControl(Bytes&& m);
   bool SendBulk(Bytes&& m);  // blocks while the bulk queue is full; false once the session stops
+  void SendAudio(Bytes&& m);  // goes out first; on a slow link the oldest is dropped (sound never lags behind)
   void SendNotice(uint8_t level, const std::string& text);
   void SendClipboard(const std::string& utf8);
 
@@ -51,13 +53,15 @@ class Session : public StreamSink, public std::enable_shared_from_this<Session> 
 
   std::mutex qmu_;
   std::condition_variable qcv_;
-  std::deque<Bytes> hi_, lo_;
+  std::deque<Bytes> au_, hi_, lo_;
   size_t loBytes_ = 0;
   std::atomic<bool> stopping_{false};
   std::atomic<bool> writerDone_{false};
   std::atomic<uint64_t> lastRecv_{0};
 
   std::unique_ptr<Streamer> streamer_;
+  std::unique_ptr<AudioStreamer> audio_;
+  bool audioWanted_ = false, streamPaused_ = false;  // (reader thread only)
   std::unique_ptr<FileReceiver> files_;
   std::atomic<bool> clipboardSync_{true};
   std::string lastClipSent_;

@@ -26,6 +26,7 @@ int RunCaptureSelfTest(int seconds, const std::wstring& out, int maxW, int maxH,
 int RunInputSelfTest();
 int RunHomeSelfTest();
 int RunVirtualScreenSelfTest();
+int RunAudioSelfTest(int seconds, const std::wstring& out);
 
 static int RunAgent(bool noUi, int exitAfterSec) {
   std::wstring mutexName = g_opt.systemMode ? L"Global\\DeskLinkHostAgent" : L"Local\\DeskLinkHostUser";
@@ -183,6 +184,10 @@ static int AppMain(int argc, wchar_t** argv) {
   if (has(L"--test-input")) return RunInputSelfTest();
   if (has(L"--test-home")) return RunHomeSelfTest();
   if (has(L"--test-virtual-screen")) return RunVirtualScreenSelfTest();
+  for (size_t i = 0; i + 1 < args.size(); i++)  // --test-audio <seconds> [out.aac]
+    if (_wcsicmp(args[i].c_str(), L"--test-audio") == 0)
+      return RunAudioSelfTest(_wtoi(args[i + 1].c_str()),
+                              i + 2 < args.size() && args[i + 2].rfind(L"--", 0) != 0 ? args[i + 2] : L"");
   if (!val(L"--test-render-ui").empty()) return ui::RenderPreviews(val(L"--test-render-ui"));
 #endif
 

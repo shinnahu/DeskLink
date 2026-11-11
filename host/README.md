@@ -1,6 +1,6 @@
 # DeskLink Host (Windows)
 
-Native C++ (Win32 + Direct3D 11 + Media Foundation + CNG). One 660 KB `.exe`, no runtime to install.
+Native C++ (Win32 + Direct3D 11 + Media Foundation + WASAPI + CNG). One 687 KB `.exe`, no runtime to install.
 
 ## Pipeline
 
@@ -32,6 +32,22 @@ Desktop Duplication (GPU) -> D3D11 video processor (BGRA->NV12, scale) -> Media 
   in 1.5 s later (10 s after the third time in a minute), and the capture, which looks for a vanished screen once a
   second, starts again on it.
 
+```
+WASAPI loopback of the default output (48 kHz 16-bit stereo, converted by Windows) -> Media Foundation AAC-LC
+128 kbps -> AUDIO_DATA, ahead of everything else on the wire
+```
+
+* Sound (`audio.cpp`), while the phone asks for it and the stream isn't paused: what the PC's speakers play. If
+  Windows won't convert, the mix format is taken as it is (44.1 or 48 kHz; float or 16/24/32-bit) and turned into
+  stereo here, surround channels mixed in. After a second of quiet, or as soon as Windows hands out nothing (nothing
+  plays), the encoder gets silence to push the last sound out and nothing more is sent until there is sound again.
+  Another default output (headphones plugged in) is picked up within a second. Without any output (the only speakers
+  were the monitor's and it's off), the phone is told so (codec 0) and it looks again every 2 s.
+* The session sends sound first: about a second of AAC frames waits at most, and on a slow link the oldest are dropped
+  rather than played late.
+* While it takes sound it logs a line a minute: the packets Windows handed out (and those it marked silent), the looks
+  with sound in them, and the AAC frames sent. A capture that hears nothing shows there.
+
 ## Source map
 
 | file | what |
@@ -43,6 +59,7 @@ Desktop Duplication (GPU) -> D3D11 video processor (BGRA->NV12, scale) -> Media 
 | `channel.cpp`, `crypto.cpp` | ECDH P-256 + ECDSA host identity + HKDF + AES-256-GCM (Windows CNG) |
 | `capture.cpp`, `encoder.cpp`, `h264.cpp` | capture, colour conversion, H.264, flow/rate control, cursor |
 | `vdisplay.cpp` | the virtual screen (Parsec VDD) while no monitor is on: added, pinged, taken away |
+| `audio.cpp` | the PC's sound: WASAPI loopback of the default output, AAC by Media Foundation, quiet gate |
 | `input.cpp`, `desktop.cpp` | `SendInput` injection (absolute mouse, relative mouse for game cameras, VK keys, Unicode text), input-desktop following |
 | `files.cpp` | phone→PC into `Downloads\DeskLink`, PC→phone via a file picker on the PC |
 | `ui.cpp`, `strings.cpp` | tray menu, "Shared with …" pill, pairing window, clipboard bridge (EN/ES) |
@@ -68,11 +85,14 @@ DeskLinkHostTest.exe --data %TEMP%\dl --fake-no-screen --test-capture 5 out.h264
 :: --test-drop-virtual 10: 10 s in, the virtual screen is taken away as its driver might; the picture must come back
 DeskLinkHostTest.exe --data %TEMP%\dl --fake-no-screen --test-drop-virtual 10 --test-capture 25 out.h264
 DeskLinkHostTest.exe --data %TEMP%\dl --test-virtual-screen          :: Parsec VDD: a virtual screen added, kept, replaced, taken away
+:: plays a quiet 1 kHz tone through the speakers for 3 s while the sound is taken, then decodes what was sent
+:: (Windows' AAC decoder): the tone must come back, and nothing may follow a second of quiet; out.aac to listen
+DeskLinkHostTest.exe --data %TEMP%\dl --test-audio 3 out.aac
 DeskLinkHostTest.exe --data %TEMP%\dl --test-input                   :: injection checked by swallowing hooks
 DeskLinkHostTest.exe --data %TEMP%\dl --test-home                    :: which addresses count as home, the router's (20 cases)
 DeskLinkHostTest.exe --data %TEMP%\dl --test-render-ui %TEMP%\png    :: pairing window PNGs
 DeskLinkHostTest.exe --data %TEMP%\dl --bind 127.0.0.1 --port 47910 --no-ui --auto-approve
-node tools\testclient.mjs 127.0.0.1 47910 %TEMP%\work                :: 17 end-to-end protocol checks
+node tools\testclient.mjs 127.0.0.1 47910 %TEMP%\work                :: 18 end-to-end protocol checks (sound too)
 ```
 
 `--data` keeps test identities, logs and received files out of the real profile.

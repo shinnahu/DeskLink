@@ -43,7 +43,7 @@ final class SettingsScreen {
     static final int K_POINTER_SPEED = 1, K_INVERT_SCROLL = 2, K_PREDICTIVE = 3, K_PAD_LABELS = 4, K_PAD_COLORS = 5,
             K_QUALITY = 6, K_FULL_SCREEN = 7, K_STATS = 8, K_CLIPBOARD = 9, K_APP_LOCK = 10, K_PAD_TYPE = 11,
             K_CAMERA_SPEED = 12, K_MODS_HOLD = 14, K_GLIDE = 15, K_PAD_LINES = 16, K_PAD_OPACITY = 17,
-            K_STICK_LOOK = 18, K_ARROW_COLOR = 19, K_NOTES = 20;
+            K_STICK_LOOK = 18, K_ARROW_COLOR = 19, K_NOTES = 20, K_SOUND = 21;
 
     private static final int MATCH = ViewGroup.LayoutParams.MATCH_PARENT, WRAP = ViewGroup.LayoutParams.WRAP_CONTENT;
 
@@ -214,6 +214,12 @@ final class SettingsScreen {
         switchRow(card, R.string.set_notes, a.getString(R.string.set_notes_sum), prefs.tapNotes(), (s, on) -> {
             prefs.setTapNotes(on);
             host.settingChanged(K_NOTES);
+        });
+
+        card = section(R.string.set_sound);
+        switchRow(card, R.string.set_sound_play, a.getString(R.string.set_sound_sum), prefs.sound(), (s, on) -> {
+            prefs.setSound(on);
+            host.settingChanged(K_SOUND);
         });
 
         card = section(R.string.set_clipboard);
