@@ -4,8 +4,8 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 
 | part | file | size |
 |---|---|---|
-| Windows host (your PC) | `dist/DeskLinkHost.exe` | 687 KB (version 2.7), no install required to try |
-| Android app (your phone) | `dist/DeskLink.apk` | 190 KB (version 2.10) |
+| Windows host (your PC) | `dist/DeskLinkHost.exe` | 704 KB (version 2.8), no install required to try |
+| Android app (your phone) | `dist/DeskLink.apk` | 192 KB (version 2.11) |
 
 On GitHub, both files are attached to each release (*Releases*, on the right of the repository page) rather than kept
 in the code.
@@ -17,7 +17,7 @@ stand-in.
 
 | Your PCs | Connected | The ⋮ menu |
 |---|---|---|
-| <img src="docs/phone-pcs.png" alt="The list of PCs, with OFFICE-PC online" width="240"> | <img src="docs/phone-session.png" alt="Connected: the PC's screen with the pointer, the top bar and the shortcut bar" width="240"> | <img src="docs/phone-menu.png" alt="The ⋮ menu: send and get files, screen, Ctrl+Alt+Del, lock, Task Manager, Settings, Disconnect" width="240"> |
+| <img src="docs/phone-pcs.png" alt="The list of PCs, with OFFICE-PC online" width="240"> | <img src="docs/phone-session.png" alt="Connected: the PC's screen with the pointer, the top bar (with the screenshot camera) and the shortcut bar" width="240"> | <img src="docs/phone-menu.png" alt="The ⋮ menu: send and get files, screen, Ctrl+Alt+Del, lock, Task Manager, Settings, Disconnect" width="240"> |
 
 | All screens at once | Gaming mode |
 |---|---|
@@ -141,12 +141,20 @@ corrections are replayed on the PC, retyping only what changed. The keyboard see
 last moved (a click, the arrow keys, Enter), so it can go back over the word it just typed.
 
 **Top bar**: the PC's name, the connection dot and ping, and buttons for the touch mode (trackpad, direct touch or
-Gaming mode), the PC's screens, and the ⋮ menu. The screen buttons appear when the PC has more than one screen:
+Gaming mode), the PC's screens, a screenshot (the camera) and the ⋮ menu. The screen buttons appear when the PC has more
+than one screen:
 * **All screens** (two screens) shows every screen at once, laid out as Windows arranges them, black where there's no
   screen. Pinch to look closer. Tap it again, or the one-screen button next to it, to go back to the screen you were on.
   It needs DeskLink 2.3 on the PC.
 * **Next screen** (a screen and an arrow) goes to the next screen to the right, and after the last one back to the
   first.
+
+**Screenshot** (the camera in the top bar): the PC takes the screen you're looking at (with *All screens*, all of
+them) and sends it to the phone as a picture, saved in `Pictures/DeskLink`, where the gallery finds it. A note says
+*Screenshot saved*, with *Open*. It's the PC's own picture at its full size, sharper than the video, the whole screen
+however far you zoomed in, and without DeskLink's buttons or the pointer (like Windows' own screenshots). Over mobile
+data it costs what the picture weighs: a few hundred KB for a plain desktop, a few MB for a screen full of photos. It
+needs DeskLink 2.8 on the PC; with an older one the camera doesn't show.
 
 A short note at the bottom says which screen is showing (*Screen 2 of 2*, counting from the left). Notes like it, and
 the ones after switching the touch mode or turning the shortcut bar on or off (*Shortcut bar shown*), can be turned off
@@ -236,6 +244,7 @@ Text that password managers mark as private is never sent.
 * ⋮ → **Get file from PC**: a file picker opens on the PC screen; choose the file with the remote pointer. It is saved on the
   phone in `Downloads/DeskLink`.
 * From any app: **Share → DeskLink → Send to PC**.
+* Screenshots (the camera in the top bar) are saved on the phone in `Pictures/DeskLink`.
 
 **Connection status**: a dot in the toolbar (green, yellow, or red) plus the ping in ms. If the connection drops, the picture
 is dimmed with *Connection lost — reconnecting…* and touches are ignored until it's back. It reconnects on its own and
@@ -445,6 +454,14 @@ from Windows, those marked silent, frames sent), and the phone's stats show the 
 2.10 also stops a second copy of a file sent from the PC being named "name.apk (1)": Windows has no type for .apk, so
 the PC sends a generic one, and Android, finding it doesn't match the name, kept the whole name as the base. The phone
 now gives Android the type it knows for the name's extension, and copies are "name (1).apk".
+Version 2.8 (PC) and 2.11 (phone) add screenshots (*Screenshot*, above). The PC copies the picture its capture already
+holds, before it's made smaller for the video, and Windows Imaging Component makes it a PNG; it travels like a file
+from the PC, marked as a screenshot, and the phone saves it with the pictures. Over 127.0.0.1 the PC answered with
+"Screenshot 2026-11-11 001844.png", a 1920×1080 PNG of the screen shown (145 KB), the right colors and nothing
+missing: the copy took under a millisecond, the PNG 31 ms. Every other protocol check still passes (20 now). On the
+phone, unit tests check where it goes (`Pictures/DeskLink`, as a PNG, through Android's media store) and that other
+files still go to `Download/DeskLink`, and the README's pictures, redrawn by the app's code, show the camera. Not yet
+tried on the phone.
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del);
@@ -453,7 +470,9 @@ Not yet verified:
 * 2.9.4's predictive text beyond "program.exe" (other words, other keyboards such as Gboard);
 * 2.9.5 on the phone: the Space key, and the bar hidden with the keyboard open;
 * the PC's sound on the phone (2.7 / 2.10): how far behind the picture it is, over mobile data, and a monitor with the
-  only speakers switched off.
+  only speakers switched off;
+* screenshots on the phone (2.8 / 2.11): the camera, the picture in the gallery, all screens, a monitor turned to
+  portrait, and the lock screen with the installed service.
 
 ## Build from source
 

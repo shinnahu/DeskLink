@@ -4,6 +4,7 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -19,7 +20,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-/** Saves files received from the PC into Downloads/DeskLink, and reads metadata of files to send. */
+/** Saves files received from the PC into Downloads/DeskLink (screenshots: Pictures/DeskLink), and reads metadata of
+ *  files to send. */
 final class FileSaver {
     private FileSaver() {}
 
@@ -27,15 +29,19 @@ final class FileSaver {
     static final class Target implements HostConnection.IncomingFileSink {
         final String name;
         final String mime;
+        final boolean picture; // a screenshot: with the pictures, where galleries look
         Uri uri;
         File file;
+        private final Context app;
         private final ContentResolver resolver;
         private OutputStream out;
 
-        Target(ContentResolver r, String name, String mime) {
-            this.resolver = r;
+        Target(Context c, String name, String mime, boolean picture) {
+            this.app = c.getApplicationContext();
+            this.resolver = c.getContentResolver();
             this.name = name;
             this.mime = mime;
+            this.picture = picture;
         }
 
         @Override
@@ -50,6 +56,8 @@ final class FileSaver {
                 ContentValues v = new ContentValues();
                 v.put(MediaStore.MediaColumns.IS_PENDING, 0);
                 resolver.update(uri, v, null, null);
+            } else if (file != null && picture) { // (before Android 10, in DeskLink's own folder: a gallery may list it)
+                MediaScannerConnection.scanFile(app, new String[] {file.getAbsolutePath()}, new String[] {mime}, null);
             }
         }
 
@@ -65,10 +73,17 @@ final class FileSaver {
         }
 
         /** Human-readable location for messages. */
-        String where() { return file != null ? file.getAbsolutePath() : "Downloads/DeskLink/" + name; }
+        String where() {
+            return file != null ? file.getAbsolutePath() : (picture ? "Pictures" : "Downloads") + "/DeskLink/" + name;
+        }
     }
 
     static Target create(Context c, String rawName, String mime) throws IOException {
+        return create(c, rawName, mime, false);
+    }
+
+    /** picture: a screenshot, saved with the pictures (Pictures/DeskLink) instead of the downloads. */
+    static Target create(Context c, String rawName, String mime, boolean picture) throws IOException {
         String name = sanitize(rawName);
         // MediaStore gets the type Android has for the name's extension, or the generic one: given a type that doesn't
         // match the name, it treats the whole name as the base, so a second "a.apk" (sent as application/octet-stream,
@@ -76,15 +91,18 @@ final class FileSaver {
         // the file when Android doesn't know the extension.
         String stored = guessMime(name);
         if (!"application/octet-stream".equals(stored) || mime == null || mime.isEmpty()) mime = stored;
+        if (!stored.startsWith("image/")) picture = false; // (the pictures take only pictures)
+        String folder = picture ? Environment.DIRECTORY_PICTURES : Environment.DIRECTORY_DOWNLOADS;
         ContentResolver r = c.getContentResolver();
-        Target t = new Target(r, name, mime);
+        Target t = new Target(c, name, mime, picture);
         if (Build.VERSION.SDK_INT >= 29) {
             ContentValues v = new ContentValues();
             v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
             v.put(MediaStore.MediaColumns.MIME_TYPE, stored);
-            v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/DeskLink");
+            v.put(MediaStore.MediaColumns.RELATIVE_PATH, folder + "/DeskLink");
             v.put(MediaStore.MediaColumns.IS_PENDING, 1);
-            Uri uri = r.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+            Uri uri = r.insert(picture ? MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                    : MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
             if (uri == null) throw new IOException("cannot create download entry");
             t.uri = uri;
             OutputStream o = r.openOutputStream(uri);
@@ -94,7 +112,7 @@ final class FileSaver {
             }
             t.out = o;
         } else {
-            File dir = new File(c.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "DeskLink");
+            File dir = new File(c.getExternalFilesDir(folder), "DeskLink");
             if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot create " + dir);
             File f = new File(dir, name);
             int i = 1;

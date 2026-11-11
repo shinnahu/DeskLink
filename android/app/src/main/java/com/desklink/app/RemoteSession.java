@@ -425,6 +425,13 @@ final class RemoteSession {
             return current() ? data.onIncomingFile(id, name, size, mime) : null;
         }
 
+        @Override
+        public HostConnection.IncomingFileSink onIncomingFile(int id, String name, long size, String mime, int kind) {
+            return current() ? data.onIncomingFile(id, name, size, mime, kind) : null;
+        }
+
+        @Override public void onScreenshotFailed(int reason, String detail) { if (current()) data.onScreenshotFailed(reason, detail); }
+
         @Override public void onIncomingFileProgress(int id, long r, long s) { data.onIncomingFileProgress(id, r, s); }
 
         @Override public void onIncomingFileDone(int id, int st, String err) { data.onIncomingFileDone(id, st, err); }

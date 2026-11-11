@@ -135,6 +135,7 @@
     <string name="tb_screens_all">Todas las pantallas</string>
     <string name="tb_screen_next">Pantalla siguiente</string>
     <string name="tb_screen_one">Una pantalla</string>
+    <string name="tb_screenshot">Captura de pantalla</string>
     <string name="screen_n_of">Pantalla %1$d de %2$d</string>
 
     <string name="key_del">Supr</string>
@@ -200,6 +201,11 @@
     <string name="files_pick_on_pc">Elegí el archivo en la pantalla de la PC…</string>
     <string name="files_none_chosen">No se eligió ningún archivo en la PC</string>
     <string name="files_not_connected">Sin conexión</string>
+    <string name="shot_taking">Sacando una captura…</string>
+    <string name="shot_saved">Captura guardada en Imágenes/DeskLink</string>
+    <string name="shot_save_failed">No se pudo guardar la captura en el teléfono</string>
+    <string name="shot_not_now">Sin captura: ahora no se puede capturar la pantalla de la PC</string>
+    <string name="shot_failed">La PC no pudo sacar la captura (%1$s)</string>
 
     <string name="share_choose_pc">¿A qué PC lo enviás?</string>
     <string name="share_no_pcs">Todavía no hay PCs vinculadas. Abrí DeskLink para agregar tu PC.</string>

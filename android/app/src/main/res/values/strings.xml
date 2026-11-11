@@ -141,6 +141,7 @@
     <string name="tb_screens_all">All screens</string>
     <string name="tb_screen_next">Next screen</string>
     <string name="tb_screen_one">One screen</string>
+    <string name="tb_screenshot">Screenshot</string>
     <string name="screen_n_of">Screen %1$d of %2$d</string>
 
     <string name="key_ctrl" translatable="false">Ctrl</string>
@@ -219,6 +220,11 @@
     <string name="files_pick_on_pc">Choose the file on the PC screen…</string>
     <string name="files_none_chosen">No file was chosen on the PC</string>
     <string name="files_not_connected">Not connected</string>
+    <string name="shot_taking">Taking a screenshot…</string>
+    <string name="shot_saved">Screenshot saved to Pictures/DeskLink</string>
+    <string name="shot_save_failed">The screenshot couldn\'t be saved on the phone</string>
+    <string name="shot_not_now">No screenshot: the PC\'s screen can\'t be captured right now</string>
+    <string name="shot_failed">The PC couldn\'t take the screenshot (%1$s)</string>
 
     <string name="stats_fmt" translatable="false">%1$d fps · %2$s Mbps · %3$d ms · %4$d×%5$d</string>
 

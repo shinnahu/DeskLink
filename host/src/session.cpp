@@ -5,6 +5,7 @@
 
 #include "app.h"
 #include "protocol.h"
+#include "screenshot.h"
 #include "ui.h"
 
 static constexpr size_t kBulkQueueCap = 2 * 1024 * 1024;
@@ -286,6 +287,14 @@ void Session::Handle(const Bytes& m) {
     case msg::SELECT_MONITOR: {
       uint8_t idx = r.u8();
       if (r.ok) streamer_->SelectMonitor(idx == kMonitorPrimary ? -1 : idx == kMonitorAll ? kAllScreens : idx);
+      break;
+    }
+    case msg::SCREENSHOT: {
+      // taken on the capture thread, then made into a PNG and sent like a file on a thread of its own
+      std::weak_ptr<Session> weak = weak_from_this();
+      streamer_->RequestShot([weak](Shot&& shot) {
+        if (auto s = weak.lock()) SendShot(s, std::move(shot));
+      });
       break;
     }
     case msg::MOUSE_MOVE: {

@@ -83,6 +83,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     private TextView titleText, pingText;
     private ImageButton btnMode;
     private ImageButton btnScreens, btnNextScreen; // the PC's screens: all at once, the next one
+    private ImageButton btnShot; // a screenshot of the PC's screen (PCs that take them)
     private FrameLayout handle;
     private ShortcutBar shortcutBar;
     // bottom-right dock: a small [shortcuts][keyboard] pill, or the full shortcut bar with those two at its end
@@ -98,6 +99,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     private TextView snackText, snackAction;
     private ProgressBar snackProgress;
     private TextView statsText;
+    private View flash; // the picture blinks white when a screenshot is asked for
 
     // state
     private final Viewport viewport = new Viewport();
@@ -136,6 +138,8 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     private boolean pcCursorShown = true; // the PC's pointer is on show (a game playing hides it)
     private final ArrayDeque<Uri> uploads = new ArrayDeque<>();
     private boolean uploading;
+    private boolean shotPending; // a screenshot was asked for and hasn't come yet
+    private long shotAskedAt;
     private final Map<Integer, FileSaver.Target> downloads = new ConcurrentHashMap<>();
     private final Matrix matrix = new Matrix();
     private Object backCallback;
@@ -321,6 +325,11 @@ public final class SessionActivity extends Activity implements HostConnection.Li
 
         cursorView = new CursorView(this);
         root.addView(cursorView, new FrameLayout.LayoutParams(match));
+
+        flash = new View(this);
+        flash.setBackgroundColor(Color.WHITE);
+        flash.setVisibility(View.GONE);
+        root.addView(flash, new FrameLayout.LayoutParams(match));
 
         touchLayer = new View(this);
         touchLayer.setOnTouchListener((v, e) -> touch.onTouch(e));
@@ -534,6 +543,9 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         btnScreens = addToolButton(R.drawable.ic_screens_all, R.string.tb_screens_all, v -> toggleAllScreens());
         btnNextScreen = addToolButton(R.drawable.ic_screen_next, R.string.tb_screen_next, v -> nextScreen());
         refreshScreenButtons();
+        // a screenshot: the PC takes the screen shown at full size and sends it, saved with the phone's pictures
+        btnShot = addToolButton(R.drawable.ic_screenshot, R.string.tb_screenshot, v -> takeScreenshot());
+        refreshShotButton();
         addToolButton(R.drawable.ic_more, R.string.tb_menu, this::showMenu);
         // the bar stays until it's hidden here; the handle at the top brings it back
         addToolButton(R.drawable.ic_expand_less, R.string.tb_hide, v -> {
@@ -627,6 +639,36 @@ public final class SessionActivity extends Activity implements HostConnection.Li
                 if (order.get(i).index == index) return getString(R.string.screen_n_of, i + 1, order.size());
         }
         return getString(R.string.menu_monitor);
+    }
+
+    /** The screenshot button shows once the PC is known to take screenshots (PC 2.8 and later). */
+    private void refreshShotButton() {
+        if (btnShot == null) return;
+        btnShot.setVisibility(hostInfo != null && hostInfo.can(Protocol.CAP_SCREENSHOT) ? View.VISIBLE : View.GONE);
+    }
+
+    /** Top bar: the PC sends a picture of the screen shown, at full size; it's saved in Pictures/DeskLink. */
+    private void takeScreenshot() {
+        HostConnection c = session != null ? session.connection() : null;
+        if (c == null || state != RemoteSession.State.LIVE) {
+            showSnack(getString(R.string.files_not_connected), -1, null, null, 2500);
+            return;
+        }
+        long now = SystemClock.uptimeMillis();
+        if (shotPending && now - shotAskedAt < 5000) return; // the one asked for is on its way
+        shotPending = true;
+        shotAskedAt = now;
+        c.requestScreenshot();
+        blink();
+        showSnack(getString(R.string.shot_taking), -1, null, null, 6000);
+    }
+
+    /** A quick white blink over the picture, as phones do for their own screenshots. */
+    private void blink() {
+        flash.animate().cancel();
+        flash.setAlpha(0.6f);
+        flash.setVisibility(View.VISIBLE);
+        flash.animate().alpha(0f).setDuration(300).withEndAction(() -> flash.setVisibility(View.GONE)).start();
     }
 
     /** The mode button shows the mode in use: a mouse (trackpad), a hand (direct touch) or a gamepad. */
@@ -1036,6 +1078,8 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         hostInfo = c.hostInfo();
         updateCameraMode(); // whether this PC can take mouse moves for a game's camera
         refreshScreenButtons(); // shown when it has more than one screen
+        refreshShotButton(); // shown when it takes screenshots
+        shotPending = false;
         // what reaches this PC over mobile data: said once, and again whenever it changes
         final int rf = hostInfo != null ? hostInfo.remoteFlags : -1;
         if (rf >= 0 && (rf & Protocol.REMOTE_CHECKING) == 0 && rf != prefs.remoteShown(hostId)) {
@@ -1190,16 +1234,25 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     }
 
     @Override
-    public HostConnection.IncomingFileSink onIncomingFile(int id, String name, long size, String mime) {
+    public HostConnection.IncomingFileSink onIncomingFile(int id, String name, long size, String mime, int kind) {
+        final boolean shot = kind == Protocol.FILE_KIND_SCREENSHOT; // the screenshot asked for: with the pictures
         try {
-            FileSaver.Target t = FileSaver.create(this, name, mime);
+            FileSaver.Target t = FileSaver.create(this, name, mime, shot);
             downloads.put(id, t);
-            main.post(() -> showSnack(getString(R.string.files_receiving, t.name, 0), 0, null, null, 0));
+            main.post(() -> showSnack(receivingText(t, 0), 0, null, null, 0));
             return t;
         } catch (IOException | RuntimeException e) {
-            main.post(() -> showSnack(getString(R.string.files_receive_failed, name), -1, null, null, 4000));
+            main.post(() -> {
+                if (shot) shotPending = false;
+                showSnack(shot ? getString(R.string.shot_save_failed) : getString(R.string.files_receive_failed, name),
+                        -1, null, null, 4000);
+            });
             return null;
         }
+    }
+
+    private String receivingText(FileSaver.Target t, int pct) {
+        return t.picture ? getString(R.string.shot_taking) : getString(R.string.files_receiving, t.name, pct);
     }
 
     @Override
@@ -1207,7 +1260,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         final FileSaver.Target t = downloads.get(id);
         if (t == null) return;
         final int pct = size > 0 ? (int) Math.min(100, received * 100 / size) : 0;
-        main.post(() -> showSnack(getString(R.string.files_receiving, t.name, pct), pct, null, null, 0));
+        main.post(() -> showSnack(receivingText(t, pct), pct, null, null, 0));
     }
 
     @Override
@@ -1215,15 +1268,27 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         final FileSaver.Target t = downloads.remove(id);
         if (t == null) return;
         main.post(() -> {
+            if (t.picture) shotPending = false;
             if (status == Protocol.FD_OK) {
                 if (t.uri != null) {
-                    showSnack(getString(R.string.files_received, t.name), -1, getString(R.string.open), () -> openFile(t), 8000);
+                    showSnack(t.picture ? getString(R.string.shot_saved) : getString(R.string.files_received, t.name), -1,
+                            getString(R.string.open), () -> openFile(t), 8000);
                 } else {
                     showSnack(getString(R.string.files_received_app, t.where()), -1, null, null, 8000);
                 }
             } else {
-                showSnack(getString(R.string.files_receive_failed, t.name), -1, null, null, 5000);
+                showSnack(t.picture ? getString(R.string.shot_save_failed) : getString(R.string.files_receive_failed, t.name),
+                        -1, null, null, 5000);
             }
+        });
+    }
+
+    @Override
+    public void onScreenshotFailed(int reason, String detail) {
+        main.post(() -> {
+            shotPending = false;
+            showSnack(reason == Protocol.SHOT_NOT_NOW ? getString(R.string.shot_not_now)
+                    : getString(R.string.shot_failed, detail == null || detail.isEmpty() ? "?" : detail), -1, null, null, 6000);
         });
     }
 

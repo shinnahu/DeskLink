@@ -164,7 +164,8 @@ public class PreviewShots {
         Messages.HostInfo info = new Messages.HostInfo();
         info.hostName = "OFFICE-PC";
         info.capabilities = Protocol.CAP_FILES | Protocol.CAP_CLIPBOARD | Protocol.CAP_KNOCK | Protocol.CAP_REL_MOUSE
-                | Protocol.CAP_ALL_SCREENS | Protocol.CAP_CTRL_ALT_DEL | Protocol.CAP_SERVICE_MODE; // installed on the PC
+                | Protocol.CAP_ALL_SCREENS | Protocol.CAP_AUDIO | Protocol.CAP_SCREENSHOT | Protocol.CAP_CTRL_ALT_DEL
+                | Protocol.CAP_SERVICE_MODE; // installed on the PC
         info.monitors.add(monitor(0, 0, 0, true));
         info.monitors.add(monitor(1, 1920, 120, false));
         set(a, "hostInfo", info);
@@ -180,6 +181,7 @@ public class PreviewShots {
         a.onCursorState(all ? 2470 : 1190, all ? 330 : 420, pointer, s.id);
         settle();
         call(a, "refreshScreenButtons");
+        call(a, "refreshShotButton");
         ((TextView) get(a, "pingText")).setText("12 ms");
         return a;
     }

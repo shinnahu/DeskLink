@@ -1,6 +1,7 @@
 # DeskLink Host (Windows)
 
-Native C++ (Win32 + Direct3D 11 + Media Foundation + WASAPI + CNG). One 687 KB `.exe`, no runtime to install.
+Native C++ (Win32 + Direct3D 11 + Media Foundation + WASAPI + WIC + CNG). One 704 KB `.exe`, no runtime to
+install.
 
 ## Pipeline
 
@@ -32,6 +33,12 @@ Desktop Duplication (GPU) -> D3D11 video processor (BGRA->NV12, scale) -> Media 
   in 1.5 s later (10 s after the third time in a minute), and the capture, which looks for a vanished screen once a
   second, starts again on it.
 
+* Screenshots (`screenshot.cpp`), when the phone asks: the capture thread copies the picture it holds before the video
+  processor makes it smaller (one screen: as the panel scans it, turned the right way round on the CPU; all screens:
+  the joined picture) into a texture the CPU can read. On a thread of its own, Windows Imaging Component makes it a
+  24-bit PNG (a full-HD screen: about 30 ms), which goes to the phone like a file from the PC, marked as a screenshot
+  (behind sound and video). With no picture within 3 s the phone is told why instead.
+
 ```
 WASAPI loopback of the default output (48 kHz 16-bit stereo, converted by Windows) -> Media Foundation AAC-LC
 128 kbps -> AUDIO_DATA, ahead of everything else on the wire
@@ -60,6 +67,7 @@ WASAPI loopback of the default output (48 kHz 16-bit stereo, converted by Window
 | `capture.cpp`, `encoder.cpp`, `h264.cpp` | capture, colour conversion, H.264, flow/rate control, cursor |
 | `vdisplay.cpp` | the virtual screen (Parsec VDD) while no monitor is on: added, pinged, taken away |
 | `audio.cpp` | the PC's sound: WASAPI loopback of the default output, AAC by Media Foundation, quiet gate |
+| `screenshot.cpp` | screenshots: the shown picture at full size as a PNG (WIC), sent like a file |
 | `input.cpp`, `desktop.cpp` | `SendInput` injection (absolute mouse, relative mouse for game cameras, VK keys, Unicode text), input-desktop following |
 | `files.cpp` | phone→PC into `Downloads\DeskLink`, PC→phone via a file picker on the PC |
 | `ui.cpp`, `strings.cpp` | tray menu, "Shared with …" pill, pairing window, clipboard bridge (EN/ES) |
@@ -92,7 +100,8 @@ DeskLinkHostTest.exe --data %TEMP%\dl --test-input                   :: injectio
 DeskLinkHostTest.exe --data %TEMP%\dl --test-home                    :: which addresses count as home, the router's (20 cases)
 DeskLinkHostTest.exe --data %TEMP%\dl --test-render-ui %TEMP%\png    :: pairing window PNGs
 DeskLinkHostTest.exe --data %TEMP%\dl --bind 127.0.0.1 --port 47910 --no-ui --auto-approve
-node tools\testclient.mjs 127.0.0.1 47910 %TEMP%\work                :: 18 end-to-end protocol checks (sound too)
+node tools\testclient.mjs 127.0.0.1 47910 %TEMP%\work                :: 20 end-to-end protocol checks (sound and a
+                                                                     :: screenshot too, kept as shot.png in the work folder)
 ```
 
 `--data` keeps test identities, logs and received files out of the real profile.

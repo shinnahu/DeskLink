@@ -191,6 +191,38 @@ async function main() {
     (acodec === 0 ? ' (this PC has no sound output)' : ''));
   send(c, 0x16, u8(1)); // sound off again
 
+  // 3c. a screenshot (capability SCREENSHOT): the shown screen at full size, sent as a PNG file of kind 1
+  ok((caps & 256) !== 0, `capabilities include SCREENSHOT (${caps})`);
+  send(c, 0x18);
+  {
+    let begin = null, shot = null, failed = null, got = 0;
+    const parts = [], deadline = Date.now() + 15000;
+    while (!shot && !failed && Date.now() < deadline) {
+      let m;
+      try { m = await Promise.race([recv(c), new Promise((_, rej) => setTimeout(() => rej(new Error('idle')), 300))]); } catch { continue; }
+      if (m.type === 0x50) send(c, 0x51, m.raw.subarray(0, 8));
+      else if (m.type === 0x91) send(c, 0x13, u32(m.r.u32()));
+      else if (m.type === 0x97) failed = `${m.r.u8()}: ${m.r.str()}`;
+      else if (m.type === 0x40) begin = { id: m.r.u32(), size: Number(m.r.u64()), name: m.r.str(), mime: m.r.str(), kind: m.r.u8() };
+      else if (m.type === 0x41 && begin && m.r.u32() === begin.id) {
+        const d = Buffer.from(m.r.rest());
+        parts.push(d);
+        got += d.length;
+        send(c, 0x44, u32(begin.id), u64(got));
+      } else if (m.type === 0x42 && begin && m.r.u32() === begin.id) {
+        shot = Buffer.concat(parts);
+        send(c, 0x45, u32(begin.id), u8(0), str(''));
+      }
+    }
+    const png = shot && shot.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'));
+    const pw = png ? shot.readUInt32BE(16) : 0, ph = png ? shot.readUInt32BE(20) : 0;
+    if (shot) fs.writeFileSync(path.join(WORK, 'shot.png'), shot);
+    ok(!failed && begin && begin.kind === 1 && begin.mime === 'image/png' && begin.name.endsWith('.png') &&
+      shot.length === begin.size && png && fmt && pw === fmt.dw && ph === fmt.dh,
+      failed ? `SCREENSHOT failed (${failed})` : `SCREENSHOT: "${begin && begin.name}" kind ${begin && begin.kind}, ` +
+      `${pw}x${ph} PNG (screen ${fmt && fmt.dw}x${fmt && fmt.dh}), ${Math.round(got / 1024)} KB`);
+  }
+
   // 4. upload a 1.5 MB file (phone -> PC)
   const blob = crypto.randomBytes(1536 * 1024 + 123);
   send(c, 0x40, u32(1), u64(blob.length), str('report ñ.bin'), str('application/octet-stream'));

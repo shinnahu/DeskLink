@@ -152,7 +152,8 @@ u8 addressCount { str address }*          // LAN IPv4, Tailscale 100.x, global I
 u8 remoteFlags                            // only with capability KNOCK: what reaches the PC over mobile data
 ```
 capabilities: `1 CTRL_ALT_DEL, 2 FILES, 4 CLIPBOARD, 8 SERVICE_MODE (lock screen / UAC visible), 16 KNOCK, 32 REL_MOUSE,
-64 ALL_SCREENS` (monitor `0xFE` shows every screen at once), `128 AUDIO` (the PC's sound, see "Sound" below; host 2.7+).
+64 ALL_SCREENS` (monitor `0xFE` shows every screen at once), `128 AUDIO` (the PC's sound, see "Sound" below; host 2.7+),
+`256 SCREENSHOT` (see "Screenshots" below; host 2.8+).
 
 remoteFlags: `1 IPV4` (the router forwards the port; the public address is in the list), `2 IPV6` (the router's IPv6
 firewall lets connections through), `4 IPV6_MAYBE` (public IPv6, router can't say), `8 NO_UPNP` (no router answered, or
@@ -170,6 +171,7 @@ the PC). Older clients stop reading after the addresses.
 | 0x15 | STREAM_CONFIG | C→H | `u16 maxWidth u16 maxHeight u8 maxFps u32 bitrateKbps` (0 = keep current) |
 | 0x16 | SET_OPTIONS | C→H | `u8 flags` as in STREAM_START (bit0 clipboard sync, bit1 sound); every option at once, a bit left out turns it off |
 | 0x17 | SELECT_MONITOR | C→H | `u8 index` (`0xFF` primary, `0xFE` all screens: only with capability `ALL_SCREENS`) |
+| 0x18 | SCREENSHOT | C→H | — (only with capability `SCREENSHOT`; see "Screenshots" below) |
 | 0x90 | VIDEO_FORMAT | H→C | `u8 codec(1=H.264) u16 width u16 height u8 monitor i32 desktopLeft i32 desktopTop i32 desktopWidth i32 desktopHeight` |
 | 0x91 | VIDEO_FRAME | H→C | `u32 frameId u8 flags(bit0 keyframe) u64 timestampUs tail annexB` |
 | 0x92 | CURSOR_SHAPE | H→C | `u32 shapeId u16 w u16 h u16 hotX u16 hotY tail rgba` (w·h·4 bytes, straight alpha, row-major) |
@@ -209,6 +211,22 @@ Video rules
 * On the wire sound goes before everything else, video before file data. When the link can't keep up, the host
   drops the oldest sound frames (about a second's worth is queued at most) rather than send them late.
 
+### Screenshots (capability `SCREENSHOT`, host 2.8+)
+| type | name | dir | payload |
+|---|---|---|---|
+| 0x18 | SCREENSHOT | C→H | — |
+| 0x97 | SCREENSHOT_FAILED | H→C | `u8 reason(1 NOT_NOW, 2 FAILURE) str detail` |
+
+* The host takes the picture its stream has before it's scaled for video: the screen shown at full size, the way it
+  is on the desktop (all screens: the whole picture, black where no screen is), without the pointer.
+* It sends it as a PNG, like a file from the host: `FILE_BEGIN` with mime `image/png` and kind `1` (screenshot), named
+  after the PC's local time (`Screenshot 2026-11-11 143205.png`; on a Spanish Windows `Captura de pantalla …`), then
+  `FILE_DATA` / `FILE_END`, with the usual `FILE_PROGRESS` / `FILE_DONE` from the client. The client keeps it with its
+  pictures.
+* `SCREENSHOT_FAILED` instead: `NOT_NOW` when there's no picture within 3 s (no stream, the stream starting over, the
+  PC locked without the service, no screen on), `FAILURE` when the picture couldn't be read or made into a PNG. `detail`
+  says why, in English (for logs).
+
 ### Input
 | type | name | dir | payload |
 |---|---|---|---|
@@ -237,7 +255,7 @@ STREAM_START: the host applies it first, so it does not send its older clipboard
 ### Files (either direction; client-created ids are odd, host-created ids are even)
 | type | name | dir | payload |
 |---|---|---|---|
-| 0x40 | FILE_BEGIN | ↔ | `u32 id u64 size str name str mime` |
+| 0x40 | FILE_BEGIN | ↔ | `u32 id u64 size str name str mime` then, from the host only and only when not 0, `u8 kind` (0 a file, 1 a screenshot that was asked for; older clients stop reading after `mime`) |
 | 0x41 | FILE_DATA | ↔ | `u32 id tail bytes` (≤ 256 KiB per message) |
 | 0x42 | FILE_END | ↔ | `u32 id` |
 | 0x43 | FILE_CANCEL | ↔ | `u32 id` (sender aborts, or receiver rejects) |
