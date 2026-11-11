@@ -1,5 +1,6 @@
 #include "session.h"
 
+#include <algorithm>
 #include <chrono>
 
 #include "app.h"
@@ -7,10 +8,12 @@
 #include "ui.h"
 
 static constexpr size_t kBulkQueueCap = 2 * 1024 * 1024;
+static constexpr size_t kAudioQueueCap = 50;  // AAC frames: about a second
 
 Session::Session(std::unique_ptr<SecureChannel> ch, PairedDevice dev) : ch_(std::move(ch)), dev_(std::move(dev)) {
   lastRecv_ = NowMs();
   streamer_ = std::make_unique<Streamer>(this);
+  audio_ = std::make_unique<AudioStreamer>([this](Bytes&& m) { SendAudio(std::move(m)); });
   files_ = std::make_unique<FileReceiver>(this);
 }
 
@@ -35,6 +38,7 @@ void Session::Stop(uint8_t byeReason, const std::string& msgText) {
     Writer w(msg::BYE);
     w.u8(byeReason).str(msgText);
     hi_.push_back(std::move(w.b));
+    au_.clear();
     lo_.clear();
     loBytes_ = 0;
   }
@@ -52,6 +56,21 @@ void Session::SendControl(Bytes&& m) {
 }
 
 void Session::SendStream(Bytes&& m) { SendControl(std::move(m)); }
+
+void Session::SendAudio(Bytes&& m) {
+  {
+    std::lock_guard<std::mutex> lk(qmu_);
+    if (stopping_) return;
+    // AUDIO_FORMAT always goes; when the link can't keep up, the oldest frames are dropped rather than played late
+    while (au_.size() >= kAudioQueueCap) {
+      auto it = std::find_if(au_.begin(), au_.end(), [](const Bytes& b) { return !b.empty() && b[0] == msg::AUDIO_DATA; });
+      if (it == au_.end()) break;
+      au_.erase(it);
+    }
+    au_.push_back(std::move(m));
+  }
+  qcv_.notify_one();
+}
 
 bool Session::SendBulk(Bytes&& m) {
   std::unique_lock<std::mutex> lk(qmu_);
@@ -136,8 +155,12 @@ void Session::WriterLoop() {
     bool exitNow = false;
     {
       std::unique_lock<std::mutex> lk(qmu_);
-      qcv_.wait_for(lk, std::chrono::milliseconds(250), [&] { return !hi_.empty() || !lo_.empty() || stopping_.load(); });
-      if (!hi_.empty()) {
+      qcv_.wait_for(lk, std::chrono::milliseconds(250),
+                    [&] { return !au_.empty() || !hi_.empty() || !lo_.empty() || stopping_.load(); });
+      if (!au_.empty()) {  // sound first: a few hundred bytes each, and late sound is worse than late video
+        m = std::move(au_.front());
+        au_.pop_front();
+      } else if (!hi_.empty()) {
         m = std::move(hi_.front());
         hi_.pop_front();
       } else if (!lo_.empty()) {
@@ -178,6 +201,7 @@ void Session::ReaderLoop() {
 }
 
 void Session::Cleanup() {
+  audio_->Stop();
   streamer_->Stop();
   InputEvent rel;
   rel.type = InputEvent::ReleaseAll;
@@ -212,21 +236,32 @@ void Session::Handle(const Bytes& m) {
       if (p.maxW == 0) p.maxW = 1920;
       if (p.maxH == 0) p.maxH = 1200;
       if (p.maxFps == 0) p.maxFps = 60;
-      clipboardSync_ = (flags & 1) != 0;
-      Log("session %s: STREAM_START monitor=%d max=%dx%d fps=%d kbps=%d clip=%d decoder=%dx%d", dev_.name.c_str(),
-          p.monitor, p.maxW, p.maxH, p.maxFps, p.kbps, (int)clipboardSync_, p.decW, p.decH);
+      clipboardSync_ = (flags & sflag::CLIPBOARD) != 0;
+      audioWanted_ = (flags & sflag::AUDIO) != 0;
+      streamPaused_ = false;
+      Log("session %s: STREAM_START monitor=%d max=%dx%d fps=%d kbps=%d clip=%d audio=%d decoder=%dx%d",
+          dev_.name.c_str(), p.monitor, p.maxW, p.maxH, p.maxFps, p.kbps, (int)clipboardSync_, (int)audioWanted_,
+          p.decW, p.decH);
       streamer_->Start(p);
+      if (audioWanted_) audio_->Start();
+      else audio_->Stop();
       if (clipboardSync_) ui::RequestClipboardPush();
       break;
     }
-    case msg::STREAM_PAUSE: streamer_->Pause(); break;
+    case msg::STREAM_PAUSE:
+      streamPaused_ = true;
+      streamer_->Pause();
+      audio_->Stop();
+      break;
     case msg::STREAM_RESUME:
+      streamPaused_ = false;
       // A phone that connected while in the background may RESUME without ever sending START.
       if (!streamer_->running()) {
         Log("session %s: RESUME before START, starting with defaults", dev_.name.c_str());
         streamer_->Start(StreamParams{});
       } else {
         streamer_->Resume();
+        if (audioWanted_) audio_->Start();
       }
       break;
     case msg::FRAME_ACK: streamer_->OnAck(r.u32()); break;
@@ -240,8 +275,11 @@ void Session::Handle(const Bytes& m) {
       uint8_t flags = r.u8();
       if (r.ok) {
         bool was = clipboardSync_;
-        clipboardSync_ = (flags & 1) != 0;
+        clipboardSync_ = (flags & sflag::CLIPBOARD) != 0;
         if (clipboardSync_ && !was) ui::RequestClipboardPush();
+        audioWanted_ = (flags & sflag::AUDIO) != 0;
+        if (audioWanted_ && streamer_->running() && !streamPaused_) audio_->Start();
+        else if (!audioWanted_) audio_->Stop();
       }
       break;
     }

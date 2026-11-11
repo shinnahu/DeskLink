@@ -181,6 +181,16 @@ async function main() {
   kf.r.u32();
   ok((kf.r.u8() & 1) === 1, 'RESUME starts with a keyframe');
 
+  // 3b. the PC's sound (capability AUDIO): SET_OPTIONS with the sound flag brings AUDIO_FORMAT
+  ok((caps & 128) !== 0, `capabilities include AUDIO (${caps})`);
+  send(c, 0x16, u8(1 | 2));
+  const af = await recvType(c, 0x95, 4000);
+  const acodec = af.r.u8(), arate = af.r.u32(), ach = af.r.u8(), acfg = af.r.rest();
+  ok((acodec === 1 && (arate === 48000 || arate === 44100) && ach === 2 && acfg.length === 2) || acodec === 0,
+    `AUDIO_FORMAT codec=${acodec} ${arate} Hz ${ach} ch config=${acfg.toString('hex')}` +
+    (acodec === 0 ? ' (this PC has no sound output)' : ''));
+  send(c, 0x16, u8(1)); // sound off again
+
   // 4. upload a 1.5 MB file (phone -> PC)
   const blob = crypto.randomBytes(1536 * 1024 + 123);
   send(c, 0x40, u32(1), u64(blob.length), str('report ñ.bin'), str('application/octet-stream'));

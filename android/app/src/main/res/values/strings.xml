@@ -256,6 +256,10 @@
     <string name="set_stats_sum">Frames per second, data and ping over the picture.</string>
     <string name="set_notes">Short notes</string>
     <string name="set_notes_sum">Confirmations like “Shortcut bar shown” or “Trackpad mode”. Messages about files and from the PC always show.</string>
+    <string name="set_sound">Sound</string>
+    <string name="set_sound_play">Play the PC\'s sound</string>
+    <string name="set_sound_sum">What the PC\'s speakers play comes out of the phone; the volume keys set it. Needs DeskLink 2.7 on the PC.</string>
+    <string name="note_no_sound">No sound: the PC has no speakers or headphones on right now</string>
     <string name="set_clipboard">Clipboard</string>
     <string name="set_clipboard_sum">Copy on one side, paste on the other.</string>
     <string name="set_security">Security</string>

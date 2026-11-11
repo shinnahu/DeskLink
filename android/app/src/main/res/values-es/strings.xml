@@ -234,6 +234,10 @@
     <string name="set_stats_sum">Cuadros por segundo, datos y ping sobre la imagen.</string>
     <string name="set_notes">Avisos breves</string>
     <string name="set_notes_sum">Confirmaciones como “Barra de atajos visible” o “Modo panel táctil”. Los mensajes de archivos y de la PC se ven siempre.</string>
+    <string name="set_sound">Sonido</string>
+    <string name="set_sound_play">Escuchar el sonido de la PC</string>
+    <string name="set_sound_sum">Lo que suena en los parlantes de la PC sale por el teléfono; lo ajustás con las teclas de volumen. Necesita DeskLink 2.7 en la PC.</string>
+    <string name="note_no_sound">Sin sonido: la PC no tiene parlantes ni auriculares activos ahora</string>
     <string name="set_clipboard">Portapapeles</string>
     <string name="set_clipboard_sum">Copiá de un lado y pegá del otro.</string>
     <string name="set_security">Seguridad</string>

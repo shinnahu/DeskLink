@@ -152,7 +152,7 @@ u8 addressCount { str address }*          // LAN IPv4, Tailscale 100.x, global I
 u8 remoteFlags                            // only with capability KNOCK: what reaches the PC over mobile data
 ```
 capabilities: `1 CTRL_ALT_DEL, 2 FILES, 4 CLIPBOARD, 8 SERVICE_MODE (lock screen / UAC visible), 16 KNOCK, 32 REL_MOUSE,
-64 ALL_SCREENS` (monitor `0xFE` shows every screen at once).
+64 ALL_SCREENS` (monitor `0xFE` shows every screen at once), `128 AUDIO` (the PC's sound, see "Sound" below; host 2.7+).
 
 remoteFlags: `1 IPV4` (the router forwards the port; the public address is in the list), `2 IPV6` (the router's IPv6
 firewall lets connections through), `4 IPV6_MAYBE` (public IPv6, router can't say), `8 NO_UPNP` (no router answered, or
@@ -162,13 +162,13 @@ the PC). Older clients stop reading after the addresses.
 ### Stream control
 | type | name | dir | payload |
 |---|---|---|---|
-| 0x10 | STREAM_START | C→H | `u8 monitor(0xFF=primary, 0xFE=all screens) u16 maxWidth u16 maxHeight u8 maxFps u32 bitrateKbps(0=auto) u8 flags(bit0 clipboard sync)` then, optionally, `u16 decoderMaxWidth u16 decoderMaxHeight` (the largest picture the client decodes; all-screens pictures stay within it) |
+| 0x10 | STREAM_START | C→H | `u8 monitor(0xFF=primary, 0xFE=all screens) u16 maxWidth u16 maxHeight u8 maxFps u32 bitrateKbps(0=auto) u8 flags(bit0 clipboard sync, bit1 sound: only with capability AUDIO)` then, optionally, `u16 decoderMaxWidth u16 decoderMaxHeight` (the largest picture the client decodes; all-screens pictures stay within it) |
 | 0x11 | STREAM_PAUSE | C→H | — (app went to background: stop video, keep connection) |
 | 0x12 | STREAM_RESUME | C→H | — (host sends keyframe + cursor shape/state) |
 | 0x13 | FRAME_ACK | C→H | `u32 frameId` (acks every frame ≤ id) |
 | 0x14 | KEYFRAME_REQUEST | C→H | — |
 | 0x15 | STREAM_CONFIG | C→H | `u16 maxWidth u16 maxHeight u8 maxFps u32 bitrateKbps` (0 = keep current) |
-| 0x16 | SET_OPTIONS | C→H | `u8 flags(bit0 clipboard sync)` |
+| 0x16 | SET_OPTIONS | C→H | `u8 flags` as in STREAM_START (bit0 clipboard sync, bit1 sound); every option at once, a bit left out turns it off |
 | 0x17 | SELECT_MONITOR | C→H | `u8 index` (`0xFF` primary, `0xFE` all screens: only with capability `ALL_SCREENS`) |
 | 0x90 | VIDEO_FORMAT | H→C | `u8 codec(1=H.264) u16 width u16 height u8 monitor i32 desktopLeft i32 desktopTop i32 desktopWidth i32 desktopHeight` |
 | 0x91 | VIDEO_FRAME | H→C | `u32 frameId u8 flags(bit0 keyframe) u64 timestampUs tail annexB` |
@@ -191,6 +191,23 @@ Video rules
   to it. Each screen is as sharp as it would be alone (`maxWidth × maxHeight`), the whole picture at most 3840×2160 and
   within the client's decoder limit. If one picture of every screen can't be made, the host falls back to a smaller
   one, then to the primary screen; `VIDEO_FORMAT` says which.
+
+### Sound (capability `AUDIO`, host 2.7+)
+| type | name | dir | payload |
+|---|---|---|---|
+| 0x95 | AUDIO_FORMAT | H→C | `u8 codec(0 none, 1 AAC-LC) u32 sampleRate u8 channels tail config` (AAC: the AudioSpecificConfig, e.g. `11 90` for 48 kHz stereo) |
+| 0x96 | AUDIO_DATA | H→C | `u64 timestampUs tail frame` (one raw AAC frame, 1024 samples per channel, no ADTS header) |
+
+* The host sends the PC's sound while the client asked for it (flag bit1 in STREAM_START or SET_OPTIONS) and the
+  stream isn't paused: what the default sound output plays (loopback), AAC-LC stereo at 128 kbps, 48 kHz (44.1 kHz
+  when Windows won't convert to 48).
+* `AUDIO_FORMAT` precedes the first frame, and comes again whenever the sound starts over: STREAM_START or RESUME,
+  sound turned on, another default output on the PC. Codec 0 says the PC has no sound output right now (its only
+  speakers were a monitor's that's off, say); the host keeps looking and sends a real format once there is one.
+* After a second of quiet the host sends nothing until there is sound again, so timestamps jump over the quiet. They
+  count samples, not wall time: the client plays frames as they come, with a small buffer of its own.
+* On the wire sound goes before everything else, video before file data. When the link can't keep up, the host
+  drops the oldest sound frames (about a second's worth is queued at most) rather than send them late.
 
 ### Input
 | type | name | dir | payload |
@@ -229,7 +246,7 @@ STREAM_START: the host applies it first, so it does not send its older clipboard
 | 0x46 | FILE_REQUEST | C→H | — host opens a Windows "pick files" dialog on the PC desktop and sends the chosen files |
 | 0x47 | FILE_REQUEST_NONE | H→C | — the dialog was cancelled |
 
-Video always has priority over file data on the wire.
+Sound and video always have priority over file data on the wire.
 
 ### Housekeeping
 | type | name | dir | payload |

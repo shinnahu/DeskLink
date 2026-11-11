@@ -4,8 +4,8 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 
 | part | file | size |
 |---|---|---|
-| Windows host (your PC) | `dist/DeskLinkHost.exe` | 660 KB (version 2.6), no install required to try |
-| Android app (your phone) | `dist/DeskLink.apk` | 186 KB (version 2.9.5) |
+| Windows host (your PC) | `dist/DeskLinkHost.exe` | 687 KB (version 2.7), no install required to try |
+| Android app (your phone) | `dist/DeskLink.apk` | 190 KB (version 2.10) |
 
 On GitHub, both files are attached to each release (*Releases*, on the right of the repository page) rather than kept
 in the code.
@@ -104,6 +104,12 @@ version 1.0's speed. A 5 left over from before becomes 3 once; any other speed y
 
 **Touch modes**: the mode button in the top bar goes Trackpad → Direct touch → Gaming mode with each tap. Touch and hold
 it to pick one, including a Gaming mode profile. *Direct touch*: tap where you want to click, long-press = right click.
+
+**Sound**: what the PC's speakers play comes out of the phone, as media, so the phone's volume keys set it. It's on by
+default (Settings → *Sound* → *Play the PC's sound*) and needs DeskLink 2.7 on the PC. It goes with the picture: it
+stops while DeskLink is in the background, and after a second of quiet nothing is sent, so a silent PC costs no data
+(about 1 MB a minute while sound plays). If the PC's only speakers are its monitor's and the monitor is off, the PC has
+no sound output: the phone says so, and the sound comes once there is one (headphones plugged in, say).
 
 **Bottom-right buttons** (always there, never hidden with the toolbar):
 
@@ -421,17 +427,33 @@ Version 2.9.5 (phone) adds a Space key to the shortcut bar's Esc Tab group (Esc,
 key: the phone keyboard's space reaches the PC as typed text, which games, video players and buttons don't take as a
 Space press, and with predictive text it may pick a suggestion first. The shortcut bar's button now shows or hides the
 bar: off, the bar no longer comes up with the keyboard (the two corner buttons stay). The button is on by default, so a
-new install shows the bar, keyboard open or not. Checked with unit tests (a tap on Space is one Space press, a hold repeats it and lets go; the group
-holds the four keys) and a picture of the bar drawn by the app's code. Not yet tried on the phone.
+new install shows the bar, keyboard open or not. Checked with unit tests (a tap on Space is one Space press, a hold
+repeats it and lets go; the group holds the four keys) and a picture of the bar drawn by the app's code. Not yet tried
+on the phone.
+Version 2.7 (PC) and 2.10 (phone) bring the PC's sound to the phone (*Sound*, above): what the default output plays,
+taken by WASAPI loopback and made AAC-LC by Windows' own encoder, decoded on the phone by Android's. On this PC (a USB
+sound card as the default output) a self-test played a quiet 1 kHz tone through the speakers while DeskLink took the
+sound: 168 AAC frames at 128 kbps for the 3.2 s tone, none before it, and nothing more 0.5 s after it ended. Windows'
+AAC decoder read the tone back 72 dB above the frequencies around it, at the level it was played. Over 127.0.0.1 the
+PC offers sound and, asked for it, says AAC-LC 48 kHz stereo; every other protocol check still passes. On the phone,
+through the installed service, the sound plays. The first try was silent, and the new counters showed why: the PC sent
+2,296 frames in a minute (the service takes the sound as well as a user does), and the phone got and decoded every one,
+but Android starts a streaming audio output only once its whole buffer is full, and DeskLink kept it under that to
+stay near live. The output now starts at 60 ms (Android 12+; older phones use a buffer small enough to fill), and a
+note says so if one ever takes sound without playing it. The PC logs a line a minute while it takes sound (packets
+from Windows, those marked silent, frames sent), and the phone's stats show the frames it got and decoded. Version
+2.10 also stops a second copy of a file sent from the PC being named "name.apk (1)": Windows has no type for .apk, so
+the PC sends a generic one, and Android, finding it doesn't match the name, kept the whole name as the base. The phone
+now gives Android the type it knows for the name's extension, and copies are "name (1).apk".
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del);
 * a long session on the virtual screen from the phone, and a virtual screen taken away while it's the only screen
   (the monitor really off) (2.6);
 * 2.9.4's predictive text beyond "program.exe" (other words, other keyboards such as Gboard);
-* 2.9.5 on the phone: the Space key, and the bar hidden with the keyboard open.
-
-There is no audio streaming.
+* 2.9.5 on the phone: the Space key, and the bar hidden with the keyboard open;
+* the PC's sound on the phone (2.7 / 2.10): how far behind the picture it is, over mobile data, and a monitor with the
+  only speakers switched off.
 
 ## Build from source
 

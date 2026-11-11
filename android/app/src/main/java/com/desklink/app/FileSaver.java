@@ -70,13 +70,18 @@ final class FileSaver {
 
     static Target create(Context c, String rawName, String mime) throws IOException {
         String name = sanitize(rawName);
-        if (mime == null || mime.isEmpty()) mime = guessMime(name);
+        // MediaStore gets the type Android has for the name's extension, or the generic one: given a type that doesn't
+        // match the name, it treats the whole name as the base, so a second "a.apk" (sent as application/octet-stream,
+        // Windows has no type for .apk) became "a.apk (1)" instead of "a (1).apk". The PC's type is kept for opening
+        // the file when Android doesn't know the extension.
+        String stored = guessMime(name);
+        if (!"application/octet-stream".equals(stored) || mime == null || mime.isEmpty()) mime = stored;
         ContentResolver r = c.getContentResolver();
         Target t = new Target(r, name, mime);
         if (Build.VERSION.SDK_INT >= 29) {
             ContentValues v = new ContentValues();
             v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-            v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+            v.put(MediaStore.MediaColumns.MIME_TYPE, stored);
             v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/DeskLink");
             v.put(MediaStore.MediaColumns.IS_PENDING, 1);
             Uri uri = r.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);

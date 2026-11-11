@@ -394,6 +394,11 @@ final class RemoteSession {
 
         @Override public void onVideoFormat(Messages.VideoFormat f) { if (current()) data.onVideoFormat(f); }
 
+        @Override public void onAudioFormat(Messages.AudioFormat f) { if (current()) data.onAudioFormat(f); }
+
+        @Override
+        public void onAudioData(long ts, byte[] d, int off, int len) { if (current()) data.onAudioData(ts, d, off, len); }
+
         @Override
         public void onVideoFrame(int id, boolean key, long ts, byte[] d, int off, int len) {
             HostConnection c = conn;

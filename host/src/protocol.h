@@ -59,8 +59,20 @@ enum : uint8_t {
   CURSOR_SHAPE = 0x92,
   CURSOR_STATE = 0x93,
   HOST_STATUS = 0x94,
+  AUDIO_FORMAT = 0x95,  // caps::AUDIO: the PC's sound, as asked for with sflag::AUDIO
+  AUDIO_DATA = 0x96,
 };
 }  // namespace msg
+
+// STREAM_START / SET_OPTIONS flags
+namespace sflag {
+enum : uint8_t { CLIPBOARD = 1, AUDIO = 2 };
+}
+
+// AUDIO_FORMAT codec
+namespace acodec {
+enum : uint8_t { NONE = 0, AAC_LC = 1 };  // NONE: the PC has no sound output right now
+}
 
 namespace st {
 enum : uint8_t { OK = 0, UNKNOWN_DEVICE = 1, BAD_TOKEN = 2, BUSY = 3, PAIRING_CLOSED = 4, DENIED = 5, RATE_LIMITED = 6, VERSION = 7, TIMEOUT = 8 };
@@ -73,7 +85,10 @@ enum : uint8_t { NORMAL = 0, STOPPED_ON_PC = 1, REPLACED = 2, HOST_EXIT = 3, PRO
 namespace caps {
 // KNOCK: connections from the internet must start with a knock (PROTOCOL.md §2), and HOST_INFO ends with the
 // mobile-data flags. REL_MOUSE: MOUSE_REL is understood. ALL_SCREENS: monitor kMonitorAll shows every screen at once.
-enum : uint32_t { CTRL_ALT_DEL = 1, FILES = 2, CLIPBOARD = 4, SERVICE_MODE = 8, KNOCK = 16, REL_MOUSE = 32, ALL_SCREENS = 64 };
+// AUDIO: the PC's sound comes with the stream when the phone asks for it (sflag::AUDIO).
+enum : uint32_t {
+  CTRL_ALT_DEL = 1, FILES = 2, CLIPBOARD = 4, SERVICE_MODE = 8, KNOCK = 16, REL_MOUSE = 32, ALL_SCREENS = 64, AUDIO = 128
+};
 }
 
 // STREAM_START / SELECT_MONITOR / VIDEO_FORMAT monitor values besides an index

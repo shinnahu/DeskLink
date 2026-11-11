@@ -59,6 +59,24 @@ public final class Messages {
         }
     }
 
+    /** AUDIO_FORMAT: what the AUDIO_DATA frames that follow are (codec NONE: the PC has no sound output right now). */
+    public static final class AudioFormat {
+        public int codec;
+        public int sampleRate;
+        public int channels;
+        /** AAC: the AudioSpecificConfig (the decoder's csd-0). */
+        public byte[] config = new byte[0];
+
+        public static AudioFormat parse(ByteReader r) {
+            AudioFormat f = new AudioFormat();
+            f.codec = r.u8();
+            f.sampleRate = (int) r.u32();
+            f.channels = r.u8();
+            f.config = r.tail();
+            return f;
+        }
+    }
+
     public static final class VideoFormat {
         public int codec;
         public int width, height;

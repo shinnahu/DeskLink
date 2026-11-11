@@ -62,6 +62,9 @@ public final class Protocol {
     public static final int CURSOR_SHAPE = 0x92;
     public static final int CURSOR_STATE = 0x93;
     public static final int HOST_STATUS = 0x94;
+    /** The PC's sound (CAP_AUDIO), while asked for with STREAM_FLAG_AUDIO. */
+    public static final int AUDIO_FORMAT = 0x95;
+    public static final int AUDIO_DATA = 0x96;
 
     // ---- status codes
     public static final int ST_OK = 0;
@@ -85,6 +88,8 @@ public final class Protocol {
     public static final int CAP_REL_MOUSE = 32;
     /** Monitor MONITOR_ALL shows every screen at once. */
     public static final int CAP_ALL_SCREENS = 64;
+    /** The PC's sound comes with the stream when asked for (STREAM_FLAG_AUDIO). */
+    public static final int CAP_AUDIO = 128;
 
     // ---- HOST_INFO mobile-data flags (what reaches the PC away from home)
     public static final int REMOTE_IPV4 = 1;          // the router forwards the port
@@ -140,6 +145,11 @@ public final class Protocol {
     public static final int MAX_CLIPBOARD_BYTES = 1024 * 1024;
 
     public static final int STREAM_FLAG_CLIPBOARD = 1;
+    /** STREAM_START / SET_OPTIONS: send the PC's sound (only to PCs with CAP_AUDIO). */
+    public static final int STREAM_FLAG_AUDIO = 2;
+    /** AUDIO_FORMAT codecs: none = the PC has no sound output right now. */
+    public static final int AUDIO_CODEC_NONE = 0;
+    public static final int AUDIO_CODEC_AAC_LC = 1;
     public static final int MONITOR_PRIMARY = 0xFF;
     /** Every screen at once, as Windows arranges them (only with CAP_ALL_SCREENS). */
     public static final int MONITOR_ALL = 0xFE;
