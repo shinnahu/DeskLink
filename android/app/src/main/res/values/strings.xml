@@ -72,6 +72,7 @@
     <!-- Session -->
     <string name="conn_connecting">Connecting to %1$s…</string>
     <string name="conn_waiting_video">Waiting for the screen…</string>
+    <string name="conn_decoder_retry">The phone\'s video decoder gave no picture. Trying another one…</string>
     <string name="conn_lost">Connection lost</string>
     <string name="conn_reconnecting">Reconnecting… (attempt %1$d)</string>
     <string name="conn_reconnecting_simple">Reconnecting…</string>
@@ -141,6 +142,7 @@
     <string name="tb_screens_all">All screens</string>
     <string name="tb_screen_next">Next screen</string>
     <string name="tb_screen_one">One screen</string>
+    <string name="tb_screenshot">Screenshot</string>
     <string name="screen_n_of">Screen %1$d of %2$d</string>
 
     <string name="key_ctrl" translatable="false">Ctrl</string>
@@ -219,6 +221,11 @@
     <string name="files_pick_on_pc">Choose the file on the PC screen…</string>
     <string name="files_none_chosen">No file was chosen on the PC</string>
     <string name="files_not_connected">Not connected</string>
+    <string name="shot_taking">Taking a screenshot…</string>
+    <string name="shot_saved">Screenshot saved to Pictures/DeskLink</string>
+    <string name="shot_save_failed">The screenshot couldn\'t be saved on the phone</string>
+    <string name="shot_not_now">No screenshot: the PC\'s screen can\'t be captured right now</string>
+    <string name="shot_failed">The PC couldn\'t take the screenshot (%1$s)</string>
 
     <string name="stats_fmt" translatable="false">%1$d fps · %2$s Mbps · %3$d ms · %4$d×%5$d</string>
 
@@ -260,6 +267,7 @@
     <string name="set_sound_play">Play the PC\'s sound</string>
     <string name="set_sound_sum">What the PC\'s speakers play comes out of the phone; the volume keys set it. Needs DeskLink 2.7 on the PC.</string>
     <string name="note_no_sound">No sound: the PC has no speakers or headphones on right now</string>
+    <string name="note_software_decoder">The phone\'s video decoder stopped answering, so the picture comes from its slower software decoder. Closing DeskLink from Recent apps tries the fast one again.</string>
     <string name="set_clipboard">Clipboard</string>
     <string name="set_clipboard_sum">Copy on one side, paste on the other.</string>
     <string name="set_security">Security</string>

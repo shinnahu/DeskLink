@@ -41,6 +41,12 @@ public final class HostConnection implements Closeable {
         default void onFileRequestNone() {}
         /** Return a sink to accept a file from the PC, or null to reject it. */
         default IncomingFileSink onIncomingFile(int id, String name, long size, String mime) { return null; }
+        /** The same, with what the file is ({@link Protocol#FILE_KIND_SCREENSHOT}: a screenshot that was asked for). */
+        default IncomingFileSink onIncomingFile(int id, String name, long size, String mime, int kind) {
+            return onIncomingFile(id, name, size, mime);
+        }
+        /** The PC took no screenshot ({@link Protocol#SHOT_NOT_NOW}, {@link Protocol#SHOT_FAILURE}). */
+        default void onScreenshotFailed(int reason, String detail) {}
         default void onIncomingFileProgress(int id, long received, long size) {}
         default void onIncomingFileDone(int id, int status, String error) {}
         default void onClosed(CloseInfo info) {}
@@ -348,6 +354,12 @@ public final class HostConnection implements Closeable {
             case Protocol.FILE_REQUEST_NONE:
                 listener.onFileRequestNone();
                 break;
+            case Protocol.SCREENSHOT_FAILED: {
+                int reason = r.u8();
+                String detail = r.remaining() >= 2 ? r.str() : "";
+                listener.onScreenshotFailed(reason, detail);
+                break;
+            }
             case Protocol.BYE: {
                 int reason = r.remaining() >= 1 ? r.u8() : 0;
                 String msg = r.remaining() >= 2 ? r.str() : "";
@@ -381,9 +393,10 @@ public final class HostConnection implements Closeable {
         long size = r.u64();
         String name = r.str();
         String mime = r.remaining() >= 2 ? r.str() : "";
+        int kind = r.remaining() >= 1 ? r.u8() : Protocol.FILE_KIND_FILE;
         IncomingFileSink sink = null;
         try {
-            sink = listener.onIncomingFile(id, name, size, mime);
+            sink = listener.onIncomingFile(id, name, size, mime, kind);
         } catch (RuntimeException ignored) {
         }
         if (sink == null) {
@@ -638,6 +651,13 @@ public final class HostConnection implements Closeable {
 
     public void requestKeyframe() { enqueue(ByteWriter.msg(Protocol.KEYFRAME_REQUEST), false); }
 
+    /** A line for the PC's log, in English (what the phone's video decoder did); kept short. */
+    public void clientLog(String line) {
+        if (line == null || line.isEmpty()) return;
+        String s = line.length() > 300 ? line.substring(0, 300) + "…" : line;
+        enqueue(new ByteWriter(1 + s.length() * 3).u8(Protocol.CLIENT_LOG).utf8Tail(s).toByteArray(), false);
+    }
+
     public void streamConfig(int maxWidth, int maxHeight, int maxFps, int bitrateKbps) {
         enqueue(new ByteWriter(10).u8(Protocol.STREAM_CONFIG).u16(maxWidth).u16(maxHeight).u8(maxFps).u32(bitrateKbps).toByteArray(), false);
     }
@@ -764,6 +784,10 @@ public final class HostConnection implements Closeable {
 
     /** Asks the PC to show its file picker; chosen files arrive through {@link Listener#onIncomingFile}. */
     public void requestFile() { enqueue(ByteWriter.msg(Protocol.FILE_REQUEST), false); }
+
+    /** Asks the PC for a screenshot (only with CAP_SCREENSHOT): it arrives through {@link Listener#onIncomingFile}
+     *  with kind FILE_KIND_SCREENSHOT, or {@link Listener#onScreenshotFailed}. */
+    public void requestScreenshot() { enqueue(ByteWriter.msg(Protocol.SCREENSHOT), false); }
 
     // =================================================================== state
 

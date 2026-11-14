@@ -28,6 +28,9 @@ public final class Protocol {
     public static final int STREAM_CONFIG = 0x15;
     public static final int SET_OPTIONS = 0x16;
     public static final int SELECT_MONITOR = 0x17;
+    /** A screenshot of the screen shown, at full size (only with CAP_SCREENSHOT): it comes as a PNG file of kind
+     *  FILE_KIND_SCREENSHOT, or SCREENSHOT_FAILED. */
+    public static final int SCREENSHOT = 0x18;
     public static final int MOUSE_MOVE = 0x20;
     public static final int MOUSE_BUTTON = 0x21;
     public static final int MOUSE_WHEEL = 0x22;
@@ -49,6 +52,8 @@ public final class Protocol {
     public static final int PING = 0x50;
     public static final int PONG = 0x51;
     public static final int NOTICE = 0x52;
+    /** Client → host: a line for the PC's log (what the phone's video decoder did). Hosts before 2.9 ignore it. */
+    public static final int CLIENT_LOG = 0x53;
     public static final int BYE = 0x5F;
 
     // ---- host -> client
@@ -65,6 +70,8 @@ public final class Protocol {
     /** The PC's sound (CAP_AUDIO), while asked for with STREAM_FLAG_AUDIO. */
     public static final int AUDIO_FORMAT = 0x95;
     public static final int AUDIO_DATA = 0x96;
+    /** No screenshot: u8 reason (SHOT_NOT_NOW, SHOT_FAILURE), str detail. */
+    public static final int SCREENSHOT_FAILED = 0x97;
 
     // ---- status codes
     public static final int ST_OK = 0;
@@ -90,6 +97,8 @@ public final class Protocol {
     public static final int CAP_ALL_SCREENS = 64;
     /** The PC's sound comes with the stream when asked for (STREAM_FLAG_AUDIO). */
     public static final int CAP_AUDIO = 128;
+    /** The PC takes screenshots (SCREENSHOT); host 2.8+. */
+    public static final int CAP_SCREENSHOT = 256;
 
     // ---- HOST_INFO mobile-data flags (what reaches the PC away from home)
     public static final int REMOTE_IPV4 = 1;          // the router forwards the port
@@ -128,6 +137,15 @@ public final class Protocol {
     public static final int BYE_HOST_EXITING = 3;
     public static final int BYE_PROTOCOL = 4;
     public static final int BYE_TIMEOUT = 5;
+
+    // ---- FILE_BEGIN's last byte: what the file is (a file without it is a plain file)
+    public static final int FILE_KIND_FILE = 0;
+    public static final int FILE_KIND_SCREENSHOT = 1;
+
+    // ---- SCREENSHOT_FAILED reasons
+    /** Nothing to take right now: no picture yet, the PC locked, no screen on. */
+    public static final int SHOT_NOT_NOW = 1;
+    public static final int SHOT_FAILURE = 2;
 
     // ---- FILE_DONE status
     public static final int FD_OK = 0;

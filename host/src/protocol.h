@@ -22,6 +22,7 @@ enum : uint8_t {
   STREAM_CONFIG = 0x15,
   SET_OPTIONS = 0x16,
   SELECT_MONITOR = 0x17,
+  SCREENSHOT = 0x18,  // caps::SCREENSHOT: the picture comes as a file of kind fkind::SCREENSHOT, or SCREENSHOT_FAILED
 
   MOUSE_MOVE = 0x20,
   MOUSE_BUTTON = 0x21,
@@ -46,6 +47,7 @@ enum : uint8_t {
   PING = 0x50,
   PONG = 0x51,
   NOTICE = 0x52,
+  CLIENT_LOG = 0x53,  // phone -> PC: a line for this log (what the phone's video decoder did), English UTF-8
   BYE = 0x5F,
 
   AUTH_RESULT = 0x80,
@@ -61,12 +63,23 @@ enum : uint8_t {
   HOST_STATUS = 0x94,
   AUDIO_FORMAT = 0x95,  // caps::AUDIO: the PC's sound, as asked for with sflag::AUDIO
   AUDIO_DATA = 0x96,
+  SCREENSHOT_FAILED = 0x97,  // u8 shotfail::*, str detail
 };
 }  // namespace msg
 
 // STREAM_START / SET_OPTIONS flags
 namespace sflag {
 enum : uint8_t { CLIPBOARD = 1, AUDIO = 2 };
+}
+
+// FILE_BEGIN's last byte (sent only when not FILE): what the file is
+namespace fkind {
+enum : uint8_t { FILE = 0, SCREENSHOT = 1 };
+}
+
+// SCREENSHOT_FAILED reasons
+namespace shotfail {
+enum : uint8_t { NOT_NOW = 1, FAILURE = 2 };  // nothing to take right now (no stream, no screen, locked) / it went wrong
 }
 
 // AUDIO_FORMAT codec
@@ -85,9 +98,11 @@ enum : uint8_t { NORMAL = 0, STOPPED_ON_PC = 1, REPLACED = 2, HOST_EXIT = 3, PRO
 namespace caps {
 // KNOCK: connections from the internet must start with a knock (PROTOCOL.md §2), and HOST_INFO ends with the
 // mobile-data flags. REL_MOUSE: MOUSE_REL is understood. ALL_SCREENS: monitor kMonitorAll shows every screen at once.
-// AUDIO: the PC's sound comes with the stream when the phone asks for it (sflag::AUDIO).
+// AUDIO: the PC's sound comes with the stream when the phone asks for it (sflag::AUDIO). SCREENSHOT: msg::SCREENSHOT
+// is understood.
 enum : uint32_t {
-  CTRL_ALT_DEL = 1, FILES = 2, CLIPBOARD = 4, SERVICE_MODE = 8, KNOCK = 16, REL_MOUSE = 32, ALL_SCREENS = 64, AUDIO = 128
+  CTRL_ALT_DEL = 1, FILES = 2, CLIPBOARD = 4, SERVICE_MODE = 8, KNOCK = 16, REL_MOUSE = 32, ALL_SCREENS = 64, AUDIO = 128,
+  SCREENSHOT = 256
 };
 }
 
