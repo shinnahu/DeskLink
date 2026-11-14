@@ -40,6 +40,8 @@ public final class Protocol {
     public static final int ACTION = 0x26;
     /** A mouse move by dx/dy counts, like a real mouse (game cameras); only with CAP_REL_MOUSE. */
     public static final int MOUSE_REL = 0x27;
+    /** Text the phone's keyboard pasted, pasted where the PC's caret is rather than typed; only with CAP_PASTE. */
+    public static final int PASTE = 0x28;
     public static final int CLIPBOARD = 0x30;
     public static final int FILE_BEGIN = 0x40;
     public static final int FILE_DATA = 0x41;
@@ -99,6 +101,8 @@ public final class Protocol {
     public static final int CAP_AUDIO = 128;
     /** The PC takes screenshots (SCREENSHOT); host 2.8+. */
     public static final int CAP_SCREENSHOT = 256;
+    /** The PC pastes text (PASTE): with clipboard sync on, from its clipboard with Ctrl+V; otherwise typed; host 2.10+. */
+    public static final int CAP_PASTE = 512;
 
     // ---- HOST_INFO mobile-data flags (what reaches the PC away from home)
     public static final int REMOTE_IPV4 = 1;          // the router forwards the port

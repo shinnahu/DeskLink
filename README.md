@@ -4,8 +4,8 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 
 | part | file | size |
 |---|---|---|
-| Windows host (your PC) | `dist/DeskLinkHost.exe` | 705 KB (version 2.9), no install required to try |
-| Android app (your phone) | `dist/DeskLink.apk` | 197 KB (version 2.12) |
+| Windows host (your PC) | `dist/DeskLinkHost.exe` | 721 KB (version 2.10), no install required to try |
+| Android app (your phone) | `dist/DeskLink.apk` | 197 KB (version 2.13) |
 
 On GitHub, both files are attached to each release (*Releases*, on the right of the repository page) rather than kept
 in the code.
@@ -122,6 +122,13 @@ no sound output: the phone says so, and the sound comes once there is one (headp
 press Enter" step, and nothing is lost if no text field was selected. **Back hides the keyboard.** When the keyboard is
 closed, Back asks before disconnecting instead of closing the app. If you leave DeskLink with the keyboard open (home
 screen, another app, the notification shade), it opens again when you come back.
+
+**Pasting from the phone's keyboard** (its clipboard, or a paste suggestion): the text is pasted on the PC, not typed,
+so a line break in it doesn't send a chat message. With *Clipboard* on (Settings → Clipboard), PC 2.10 or later puts the
+text on its clipboard and presses Ctrl+V, the way a paste on the PC works; the PC's clipboard then holds that text.
+With *Clipboard* off, or with an older PC, the text is typed and each line break is Shift+Enter, a new line in chats
+where Enter sends. The keyboard's text counts as a paste when it's more than one character with a line break, or the
+phone's clipboard as DeskLink last saw it.
 
 **Shortcut bar** (shown while the button above is on: at the bottom of the screen, or above the keyboard, sliding with
 it; with the button off it doesn't show, not even with the keyboard).
@@ -484,6 +491,17 @@ PCs ignore it), and the stats are drawn over the waiting screen. Checked with un
 which decoder comes next, with OMX names as aliases of the Codec2 ones) and, over 127.0.0.1, a line from the test
 client written to the PC's log; every protocol check passes (21 now). Switching decoders hasn't been seen on a phone:
 what happened on 11-14 can't be made to happen on purpose.
+Version 2.10 (PC) and 2.13 (phone) paste what the phone's keyboard pastes. On 2026-11-14 a paste on the phone into a
+chat on the PC sent the message by itself, without the text's first words. The phone sent a paste from its keyboard as
+typed text, and the PC types a line break as Enter, which sends a chat message. How that text was pasted, whether it
+had a line break, and why its first words were missing aren't known. The phone now sends a paste as one (a new message, PASTE): with the
+clipboard shared, PC 2.10 puts the text on its clipboard and presses Ctrl+V once it's there, in its place among the keys
+around it, so the app gets the whole text at once rather than a quick run of keys. Otherwise the text is typed, each line
+break as Shift+Enter. Checked with unit tests (a line and its line break, two lines, the clipboard's text, a word
+corrected together with Enter still pressing Enter, text sent as key events), a self-test on the PC (the text on the
+clipboard before Ctrl+V, which comes between a Backspace and a letter; the keys recorded, not injected; the clipboard's
+own text put back), and over 127.0.0.1 a paste the PC typed without a clipboard, Shift+Enter between its lines (23
+checks, all passing). Not yet tried on the phone.
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del);
@@ -497,6 +515,8 @@ Not yet verified:
   portrait, and the lock screen with the installed service;
 * 2.12 on the phone: the picture as before, the stats over the waiting screen, the decoder's `phone:` lines in the PC's
   log (2.9), and a decoder given up on (seen once, on 2026-11-14).
+* 2.13 on the phone: a paste from the keyboard into a chat on the PC (2.10), with *Clipboard* on and off, and with an
+  older PC.
 
 ## Build from source
 

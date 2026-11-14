@@ -770,6 +770,19 @@ public final class HostConnection implements Closeable {
         enqueue(new ByteWriter(1 + s.length() * 3).u8(Protocol.TEXT).utf8Tail(s).toByteArray(), false);
     }
 
+    /**
+     * Text the phone's keyboard pasted, for a PC with CAP_PASTE. With clipboard sync on, the PC puts it on its clipboard
+     * and pastes it with Ctrl+V; otherwise it types it, each line break as Shift+Enter. False (nothing sent) if it's
+     * longer than a clipboard may be.
+     */
+    public boolean paste(String s) {
+        if (s == null || s.isEmpty()) return true;
+        byte[] utf8 = s.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (utf8.length > Protocol.MAX_CLIPBOARD_BYTES) return false;
+        enqueue(new ByteWriter(1 + utf8.length).u8(Protocol.PASTE).bytes(utf8, 0, utf8.length).toByteArray(), false);
+        return true;
+    }
+
     public void releaseAll() { enqueue(ByteWriter.msg(Protocol.RELEASE_ALL), false); }
 
     public void action(int action) { enqueue(new ByteWriter(2).u8(Protocol.ACTION).u8(action).toByteArray(), false); }

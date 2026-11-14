@@ -1,9 +1,11 @@
 package com.desklink.app;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -17,6 +19,10 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 /**
  * The calls keyboards make, and the text they leave on the PC. Keyboards look back at the text before the caret
  * and re-edit what they typed; only the keystrokes that differ may reach the PC.
@@ -27,6 +33,9 @@ public class KeyInputViewTest {
     /** The PC: text is typed at its caret, at the end; Backspace deletes one character before it. */
     private final StringBuilder pc = new StringBuilder();
     private int keystrokes;
+    private int enters;                                   // Enter presses: in a chat, each sends the message
+    private final List<String> pastes = new ArrayList<>(); // what went to the PC as a paste
+    private String clipboard;                             // what the app knows the phone clipboard holds
     private KeyInputView view;
     private InputConnection ic;
 
@@ -37,7 +46,13 @@ public class KeyInputViewTest {
             @Override public void typeText(String text) {
                 pc.append(text);
                 keystrokes += text.codePointCount(0, text.length());
+                enters += KeyInputView.lines(text).length - 1; // the PC types a line break as Enter
             }
+            @Override public void pasteText(String text) {
+                pastes.add(text);
+                pc.append(text);
+            }
+            @Override public boolean isClipboard(String text) { return text.equals(clipboard); }
             @Override public void keyTap(int vk) { key(vk); }
             @Override public void keyEvent(int vk, boolean down) { if (down) key(vk); }
             @Override public boolean modifiersActive() { return false; }
@@ -49,7 +64,10 @@ public class KeyInputViewTest {
     private void key(int vk) {
         keystrokes++;
         if (vk == Vk.BACK && pc.length() > 0) pc.setLength(pc.offsetByCodePoints(pc.length(), -1));
-        else if (vk == Vk.RETURN) pc.append('\n');
+        else if (vk == Vk.RETURN) {
+            pc.append('\n');
+            enters++;
+        }
     }
 
     /** A word typed letter by letter, composing as it goes. */
@@ -169,6 +187,80 @@ public class KeyInputViewTest {
         ic.deleteSurroundingTextInCodePoints(2, 0);
         assertEquals("a", pc.toString());
         assertEquals("a", before());
+    }
+
+    @Test
+    public void pastedLineIsPastedNotTypedWithEnter() {
+        // 2026-11-14: a paste on the phone into a chat on the PC sent the message by itself. The PC types a line break
+        // as an Enter press, which sends a chat message, so the keyboard's paste must not be typed as it is.
+        String line = "Edge has an enhance videos feature, is this option available in tacit? If not add it and put it as default.\n";
+        ic.commitText(line, 1);
+        assertEquals(Arrays.asList(line), pastes);
+        assertEquals("no Enter press", 0, enters);
+        assertEquals(line, pc.toString());
+        assertEquals("the keyboard starts over, as after Enter", "", before());
+    }
+
+    @Test
+    public void pastedLinesArePasted() {
+        compose("see");
+        ic.finishComposingText();
+        ic.commitText(" ", 1);
+        ic.commitText("first line\r\nsecond line", 1);
+        assertEquals(Arrays.asList("first line\r\nsecond line"), pastes);
+        assertEquals(0, enters);
+        assertEquals("see first line\r\nsecond line", pc.toString());
+    }
+
+    @Test
+    public void enterWithTheWordIsStillEnter() {
+        // a keyboard may commit the word it corrected together with Enter: that's typing, Enter included
+        compose("teh");
+        ic.commitText("the\n", 1);
+        assertTrue(pastes.isEmpty());
+        assertEquals(1, enters);
+        assertEquals("the\n", pc.toString());
+        ic.commitText("\n", 1); // Enter alone
+        assertTrue(pastes.isEmpty());
+        assertEquals(2, enters);
+    }
+
+    @Test
+    public void theClipboardsTextIsPasted() {
+        clipboard = "Edge has an enhance videos feature";
+        ic.commitText(clipboard, 1);
+        assertEquals(Arrays.asList(clipboard), pastes);
+        assertEquals("the same line stays text before the caret", clipboard, before());
+        ic.commitText("hello world", 1); // not the clipboard, no line break: typed
+        assertEquals(1, pastes.size());
+        assertEquals(clipboard + "hello world", pc.toString());
+    }
+
+    @Test
+    public void aCorrectionIntoTheClipboardsTextPastesOnlyWhatsNew() {
+        // the keyboard replaces the word it was composing with the clipboard's text: "Edg" is on the PC already
+        clipboard = "Edge has an enhance videos feature";
+        compose("Edg");
+        ic.commitText(clipboard, 1);
+        assertEquals(Arrays.asList("e has an enhance videos feature"), pastes);
+        assertEquals(clipboard, pc.toString());
+    }
+
+    @Test
+    public void keysWithLinesArePasted() {
+        long t = SystemClock.uptimeMillis();
+        ic.sendKeyEvent(new KeyEvent(t, "one\ntwo", 0, 0)); // text sent as one key event (ACTION_MULTIPLE)
+        assertEquals(Arrays.asList("one\ntwo"), pastes);
+        assertEquals(0, enters);
+        ic.sendKeyEvent(new KeyEvent(t, "ab", 0, 0)); // two letters: typed
+        assertEquals(1, pastes.size());
+        assertEquals("one\ntwoab", pc.toString());
+    }
+
+    @Test
+    public void linesSplitAtEveryKindOfLineBreak() {
+        assertArrayEquals(new String[]{"a", "b", "c", "d", ""}, KeyInputView.lines("a\r\nb\rc\nd\n"));
+        assertArrayEquals(new String[]{"one line"}, KeyInputView.lines("one line"));
     }
 
     @Test

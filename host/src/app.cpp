@@ -90,7 +90,7 @@ int App::PairingSecondsLeft() {
 
 uint32_t App::Capabilities() const {
   uint32_t c = caps::FILES | caps::CLIPBOARD | caps::KNOCK | caps::REL_MOUSE | caps::ALL_SCREENS | caps::AUDIO |
-               caps::SCREENSHOT;
+               caps::SCREENSHOT | caps::PASTE;
   if (g_opt.systemMode) c |= caps::CTRL_ALT_DEL | caps::SERVICE_MODE;
   return c;
 }

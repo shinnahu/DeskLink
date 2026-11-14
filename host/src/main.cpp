@@ -24,6 +24,7 @@
 
 int RunCaptureSelfTest(int seconds, const std::wstring& out, int maxW, int maxH, int fps, int kbps, int monitor);
 int RunInputSelfTest();
+int RunPasteSelfTest();
 int RunHomeSelfTest();
 int RunVirtualScreenSelfTest();
 int RunAudioSelfTest(int seconds, const std::wstring& out);
@@ -182,6 +183,7 @@ static int AppMain(int argc, wchar_t** argv) {
   }
 #ifdef DESKLINK_TESTING
   if (has(L"--test-input")) return RunInputSelfTest();
+  if (has(L"--test-paste")) return RunPasteSelfTest();
   if (has(L"--test-home")) return RunHomeSelfTest();
   if (has(L"--test-virtual-screen")) return RunVirtualScreenSelfTest();
   for (size_t i = 0; i + 1 < args.size(); i++)  // --test-audio <seconds> [out.aac]

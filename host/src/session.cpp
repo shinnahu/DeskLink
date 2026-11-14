@@ -348,6 +348,29 @@ void Session::Handle(const Bytes& m) {
       if (!e.text.empty()) g_app->input.Post(std::move(e));
       break;
     }
+    case msg::PASTE: {
+      // Pasted on the PC with Ctrl+V when the phone shares its clipboard (the text is put there first, and the input
+      // thread waits for that), otherwise typed. Either way it keeps its place among the keys around it.
+      size_t n = 0;
+      const uint8_t* p = r.rest(n);
+      if (n == 0 || n > 1024 * 1024) break;
+      std::string text((const char*)p, n);
+      InputEvent e;
+      e.type = InputEvent::Paste;
+      e.text = U2W(text);
+      if (e.text.empty()) break;
+      if (clipboardSync_) {
+        auto put = std::make_shared<std::promise<bool>>();
+        e.onClipboard = put->get_future().share();
+        {
+          std::lock_guard<std::mutex> lk(clipMu_);
+          lastClipSent_ = text;  // don't send it back
+        }
+        ui::SetClipboardText(text, [put](bool ok) { put->set_value(ok); });
+      }
+      g_app->input.Post(std::move(e));
+      break;
+    }
     case msg::RELEASE_ALL: {
       InputEvent e;
       e.type = InputEvent::ReleaseAll;

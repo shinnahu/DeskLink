@@ -23,6 +23,13 @@ final class KeyInputView extends View {
     interface Sink {
         /** Printable text, typed immediately. */
         void typeText(String text);
+        /**
+         * Text the keyboard pasted (see {@link #pasted}). Typed as it is, each line break would be an Enter press, which
+         * sends the message in a chat.
+         */
+        default void pasteText(String text) { typeText(text); }
+        /** True if text is what the phone's clipboard holds, as far as the app knows. */
+        default boolean isClipboard(String text) { return false; }
         /** Press + release a Windows virtual key. */
         void keyTap(int vk);
         /** Raw key down/up (hardware keyboards, IME key events). */
@@ -124,12 +131,42 @@ final class KeyInputView extends View {
         return super.onKeyMultiple(keyCode, repeatCount, event);
     }
 
-    /** Text from keys (not from the keyboard's text calls): typed, and remembered as text before the caret. */
+    /** Text from keys (not from the keyboard's text calls): typed (or pasted), and remembered as text before the caret. */
     private void typeKeys(String s) {
-        sink.typeText(s);
+        boolean paste = pasted(s, s, sink);
+        if (paste) sink.pasteText(s);
+        else sink.typeText(s);
         RemoteInputConnection ic = current;
         if (ic != null) ic.typedByKey(s);
+        if (paste && hasLineBreak(s)) resetComposition(); // the keyboard starts over on the new line, as after Enter
     }
+
+    /**
+     * Whether text the keyboard put in at once is a paste rather than typing. added: what it puts at the caret;
+     * committed: all of what it committed (the start may be there already, e.g. a word it was composing). A paste is
+     * more than one character with a line break in it, or the clipboard's text. Only "word" + one line break at the
+     * end still counts as typing: a keyboard may commit the word it corrected together with Enter.
+     */
+    static boolean pasted(String added, String committed, Sink sink) {
+        if (added.length() < 2) return false;
+        int end = added.length();
+        if (added.endsWith("\r\n")) end -= 2;
+        else if (added.endsWith("\n") || added.endsWith("\r")) end--;
+        String body = added.substring(0, end);
+        if (hasLineBreak(body)) return true;
+        if (end < added.length() && hasWhitespace(body)) return true; // a line of words and its line break
+        return sink != null && (sink.isClipboard(committed) || sink.isClipboard(added));
+    }
+
+    static boolean hasLineBreak(String s) { return s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0; }
+
+    private static boolean hasWhitespace(String s) {
+        for (int i = 0; i < s.length(); i++) if (Character.isWhitespace(s.charAt(i))) return true;
+        return false;
+    }
+
+    /** The lines of a text, for typing it with Shift+Enter between them ("\r\n", "\r" and "\n" each end a line). */
+    static String[] lines(String s) { return s.split("\r\n|\r|\n", -1); }
 
     boolean handleKey(KeyEvent e) {
         if (sink == null) return false;
@@ -267,11 +304,15 @@ final class KeyInputView extends View {
             composeStart = -1;
         }
 
-        /** Makes the composing text (or, with none, new text at the caret) newText: only the keystrokes that differ. */
-        private void replaceComposing(String newText) {
+        /**
+         * Makes the composing text (or, with none, new text at the caret) newText: only the keystrokes that differ. A
+         * paste goes as one. Returns true if what it put in was pasted with a line break in it.
+         */
+        private boolean replaceComposing(String newText) {
             int from = composeStart >= 0 ? composeStart : text.length();
             String old = text.substring(from);
             Sink s = sink();
+            boolean pastedLines = false;
             if (s != null) {
                 int p = 0;
                 int max = Math.min(old.length(), newText.length());
@@ -280,10 +321,16 @@ final class KeyInputView extends View {
                 int remove = old.codePointCount(p, old.length());
                 for (int i = 0; i < remove; i++) s.keyTap(Vk.BACK);
                 String add = newText.substring(p);
-                if (!add.isEmpty()) s.typeText(add);
+                if (pasted(add, newText, s)) {
+                    s.pasteText(add);
+                    pastedLines = hasLineBreak(add);
+                } else if (!add.isEmpty()) {
+                    s.typeText(add);
+                }
             }
             text.setLength(from);
             text.append(newText);
+            return pastedLines;
         }
 
         /** Keeps the last KEEP chars (and all of the composing text). */
@@ -299,9 +346,10 @@ final class KeyInputView extends View {
 
         @Override
         public boolean commitText(CharSequence t, int newCursorPosition) {
-            replaceComposing(t == null ? "" : t.toString());
+            boolean pastedLines = replaceComposing(t == null ? "" : t.toString());
             composeStart = -1;
             trim();
+            if (pastedLines) owner.resetComposition(); // the keyboard starts over on the new line, as after Enter
             return true;
         }
 
@@ -309,9 +357,10 @@ final class KeyInputView extends View {
         public boolean setComposingText(CharSequence t, int newCursorPosition) {
             String s = t == null ? "" : t.toString();
             int from = composeStart >= 0 ? composeStart : text.length();
-            replaceComposing(s);
+            boolean pastedLines = replaceComposing(s);
             composeStart = s.isEmpty() ? -1 : from;
             trim();
+            if (pastedLines) owner.resetComposition();
             return true;
         }
 

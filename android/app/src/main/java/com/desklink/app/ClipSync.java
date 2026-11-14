@@ -64,6 +64,7 @@ final class ClipSync {
     private String held;      // the PC's clipboard, arrived before that
     private long ignoreUntil; // see IGNORE_PC_MS
     private String lastSent;  // normalized; the PC sending it back is an echo, not a new copy
+    private String known;     // normalized: what the phone clipboard held when last looked at or set here; null: unknown
 
     ClipSync(Phone phone, Seen seen) {
         this.phone = phone;
@@ -83,7 +84,10 @@ final class ClipSync {
         String copy = newPhoneCopy();
         boolean sent = copy != null && !copy.isEmpty();
         // a new copy on the phone, sent or not, is newer than the clipboard the PC sends when a stream starts
-        if (copy != null) ignoreUntil = now + IGNORE_PC_MS;
+        if (copy != null) {
+            ignoreUntil = now + IGNORE_PC_MS;
+            known = sent ? normalize(copy) : null;
+        }
         if (sent) {
             pc.send(copy);
             lastSent = normalize(copy);
@@ -140,10 +144,18 @@ final class ClipSync {
         try {
             // the same text already came from the PC: don't set it again
             Info d = phone.canRead() ? phone.info() : null;
-            if (d != null && isOurs(d) && normalize(phone.text()).equals(normalize(text))) return;
-            phone.set(text);
+            if (d == null || !isOurs(d) || !normalize(phone.text()).equals(normalize(text))) phone.set(text);
+            known = normalize(text);
         } catch (RuntimeException ignored) {
         }
+    }
+
+    /**
+     * True if text is what the phone clipboard holds, as far as this knows: the copy it last sent to the PC, or the
+     * PC's that it put there. The keyboard putting that in at once is a paste.
+     */
+    boolean holds(String text) {
+        return known != null && text != null && !text.isEmpty() && known.equals(normalize(text));
     }
 
     private static boolean isOurs(Info d) {

@@ -153,7 +153,7 @@ u8 remoteFlags                            // only with capability KNOCK: what re
 ```
 capabilities: `1 CTRL_ALT_DEL, 2 FILES, 4 CLIPBOARD, 8 SERVICE_MODE (lock screen / UAC visible), 16 KNOCK, 32 REL_MOUSE,
 64 ALL_SCREENS` (monitor `0xFE` shows every screen at once), `128 AUDIO` (the PC's sound, see "Sound" below; host 2.7+),
-`256 SCREENSHOT` (see "Screenshots" below; host 2.8+).
+`256 SCREENSHOT` (see "Screenshots" below; host 2.8+), `512 PASTE` (`PASTE` below; host 2.10+).
 
 remoteFlags: `1 IPV4` (the router forwards the port; the public address is in the list), `2 IPV6` (the router's IPv6
 firewall lets connections through), `4 IPV6_MAYBE` (public IPv6, router can't say), `8 NO_UPNP` (no router answered, or
@@ -238,8 +238,12 @@ Video rules
 | 0x25 | RELEASE_ALL | C→H | — releases every key/button the client holds |
 | 0x26 | ACTION | C→H | `u8 action` 1 CTRL_ALT_DEL, 2 LOCK_PC, 3 TASK_MANAGER |
 | 0x27 | MOUSE_REL | C→H | `i16 dx i16 dy` mouse counts, like a real mouse (games that read the mouse directly, e.g. a 3D camera, turn by them; a visible pointer moves by them with Windows' pointer speed). Only to hosts with capability `REL_MOUSE` |
+| 0x28 | PASTE | C→H | `tail utf8` (≤ 1 MiB) text the client's keyboard pasted, pasted at the PC's caret. With clipboard sync on, the host puts it on its clipboard (and doesn't send it back) and presses Ctrl+V once it's there; otherwise it types it, each line break as Shift+Enter. Either way it keeps its place among the input around it. Only to hosts with capability `PASTE` |
 
 * While Ctrl/Alt/Win is held (KEY down sent), the client sends letters/digits as `KEY` (VK `0x41..0x5A`, `0x30..0x39`) instead of `TEXT`, so shortcuts work.
+* Pasted text doesn't go as `TEXT`: a line break in it would be Enter, which sends the message in a chat. To a host
+  without `PASTE` the client sends it as `TEXT` line by line, with Shift+Enter (`KEY` 10 down, 0D down and up, 10 up)
+  between the lines.
 * The host releases everything the client still holds when the session ends.
 * Useful VKs: BACK 08, TAB 09, RETURN 0D, SHIFT 10, CONTROL 11, MENU(Alt) 12, ESCAPE 1B, SPACE 20, PRIOR 21, NEXT 22,
   END 23, HOME 24, LEFT 25, UP 26, RIGHT 27, DOWN 28, SNAPSHOT 2C, INSERT 2D, DELETE 2E, LWIN 5B, APPS 5D, F1..F12 70..7B.

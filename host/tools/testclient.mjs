@@ -243,6 +243,35 @@ async function main() {
       (!logPath ? ' (HOST_LOG not set: the log line is not checked)' : logged ? `; logged: ${logged.slice(13)}` : '; NOT in the log'));
   }
 
+  // 3e. PASTE (host 2.10): text the phone's keyboard pasted. A test host without its UI (--no-ui) has no clipboard
+  // to paste from, so it types the text, the line break as Shift+Enter. Sent only when HOST_NO_INJECT=1 says the test
+  // host was started with --no-inject (it then logs the keys instead of typing them on this PC), and checked in its log.
+  ok((caps & 512) !== 0, `capabilities include PASTE (${caps})`);
+  if (process.env.HOST_NO_INJECT === '1' && process.env.HOST_LOG) {
+    const logPath = process.env.HOST_LOG;
+    const before = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').length : 0;
+    send(c, 0x28, Buffer.from('ab\ncd', 'utf8'));
+    let keys = null;
+    for (let i = 0; i < 30 && !keys; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const lines = fs.readFileSync(logPath, 'utf8').slice(before).split(/\r?\n/);
+      const at = lines.findIndex((l) => l.includes('input: a paste of 5 characters, typed'));
+      if (at < 0) continue;
+      const k = lines.slice(at + 1).filter((l) => l.includes('input(test): key')).slice(0, 12);
+      if (k.length < 12) continue;
+      keys = k.map((l) => {
+        const m = /vk=0x([0-9a-f]+) scan=0x([0-9a-f]+) flags=0x([0-9a-f]+)/.exec(l);
+        const vk = parseInt(m[1], 16), scan = parseInt(m[2], 16), fl = parseInt(m[3], 16);
+        const name = fl & 4 ? String.fromCharCode(scan) : vk === 0x10 ? 'SHIFT' : vk === 0x0d ? 'RETURN' : `vk${vk}`;
+        return `${name} ${fl & 2 ? 'up' : 'down'}`;
+      });
+    }
+    const want = ['a down', 'a up', 'b down', 'b up', 'SHIFT down', 'RETURN down', 'RETURN up', 'SHIFT up', 'c down', 'c up', 'd down', 'd up'];
+    ok(keys && keys.join() === want.join(), `PASTE typed without a clipboard: ${keys ? keys.join(', ') : 'NOT in the log'}`);
+  } else {
+    console.log('      PASTE not sent (set HOST_NO_INJECT=1 and HOST_LOG for a host started with --no-inject)');
+  }
+
   // 4. upload a 1.5 MB file (phone -> PC)
   const blob = crypto.randomBytes(1536 * 1024 + 123);
   send(c, 0x40, u32(1), u64(blob.length), str('report ñ.bin'), str('application/octet-stream'));

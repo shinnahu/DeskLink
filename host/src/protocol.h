@@ -32,6 +32,7 @@ enum : uint8_t {
   RELEASE_ALL = 0x25,
   ACTION = 0x26,
   MOUSE_REL = 0x27,  // caps::REL_MOUSE: a mouse move by dx/dy counts, like a real mouse (game cameras)
+  PASTE = 0x28,      // caps::PASTE: text the phone's keyboard pasted, pasted at the PC's caret (Ctrl+V), not typed
 
   CLIPBOARD = 0x30,
 
@@ -99,10 +100,10 @@ namespace caps {
 // KNOCK: connections from the internet must start with a knock (PROTOCOL.md §2), and HOST_INFO ends with the
 // mobile-data flags. REL_MOUSE: MOUSE_REL is understood. ALL_SCREENS: monitor kMonitorAll shows every screen at once.
 // AUDIO: the PC's sound comes with the stream when the phone asks for it (sflag::AUDIO). SCREENSHOT: msg::SCREENSHOT
-// is understood.
+// is understood. PASTE: msg::PASTE is understood.
 enum : uint32_t {
   CTRL_ALT_DEL = 1, FILES = 2, CLIPBOARD = 4, SERVICE_MODE = 8, KNOCK = 16, REL_MOUSE = 32, ALL_SCREENS = 64, AUDIO = 128,
-  SCREENSHOT = 256
+  SCREENSHOT = 256, PASTE = 512
 };
 }
 

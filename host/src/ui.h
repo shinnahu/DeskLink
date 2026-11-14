@@ -15,7 +15,8 @@ void Quit();
 
 void SessionStarted(const std::string& deviceName);
 void SessionEnded();
-void SetClipboardText(const std::string& utf8);
+// done, if given, is told on the UI thread whether the text got on the clipboard (false at once without a UI thread).
+void SetClipboardText(const std::string& utf8, std::function<void(bool)> done = nullptr);
 void RequestClipboardPush();  // send the current PC clipboard to the phone
 void FileReceived(const std::wstring& path);
 void Notify(const std::wstring& title, const std::wstring& text);
