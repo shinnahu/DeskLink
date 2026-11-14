@@ -3,6 +3,7 @@
 #include <dxgi1_5.h>
 
 #include <climits>
+#include <functional>
 #include <set>
 
 #include "common.h"
@@ -27,6 +28,16 @@ struct StreamParams {
   int kbps = 0;  // 0 = adaptive
   int decW = 0, decH = 0;  // the largest picture the phone's decoder takes (0 = it didn't say)
 };
+
+// A screenshot: the stream's picture before it's made smaller, the way it is on the desktop (BGRX, rows top down,
+// w * 4 bytes each), or why there is none.
+struct Shot {
+  int w = 0, h = 0;
+  std::vector<uint32_t> px;
+  uint8_t fail = 0;  // shotfail::* (protocol.h); 0 = px holds the picture
+  std::string why;   // for the log and the phone
+};
+using ShotDone = std::function<void(Shot&&)>;
 
 struct StreamStats {
   uint32_t frames = 0;
@@ -53,6 +64,9 @@ class Streamer {
   void RequestKeyframe();
   void Configure(int maxW, int maxH, int maxFps, int kbps);
   void SelectMonitor(int idx);
+  // A screenshot of what's shown, at full size: done gets it on the capture thread once there is a picture (3 s at
+  // most), or here at once when no stream runs. Call from the thread that starts and stops the stream.
+  void RequestShot(ShotDone done);
   StreamStats Stats();
   bool running() const { return th_.joinable(); }
 
@@ -85,6 +99,8 @@ class Streamer {
   void ResendCursor();
   void SendStatus(uint8_t flags, const std::string& text);
   void AdaptBitrate(uint64_t now);
+  void ServeShots(uint64_t now);
+  bool GrabShot(Shot& out);
   size_t InflightCount();
   int Window();
 
@@ -99,6 +115,11 @@ class Streamer {
   bool reinitRequested_ = false;
   bool keyRequested_ = false;
   bool cursorResend_ = false;
+  struct ShotWait {
+    ShotDone done;
+    uint64_t since;
+  };
+  std::vector<ShotWait> shots_;  // screenshots asked for, waiting for a picture
   struct Inflight {
     uint32_t id;
     uint64_t sentMs;
@@ -115,6 +136,7 @@ class Streamer {
   size_t waitOn_ = 0;      // the screen to wait on for a change (the one that changed last)
   ComPtr<ID3D11Texture2D> capTex_;
   D3D11_TEXTURE2D_DESC capDesc_{};
+  ComPtr<ID3D11Texture2D> shotTex_;  // capTex_ copied where the CPU can read it, for a screenshot
   ComPtr<ID3D11VideoDevice> vdev_;
   ComPtr<ID3D11VideoContext> vctx_;
   ComPtr<ID3D11VideoProcessorEnumerator> vpEnum_;

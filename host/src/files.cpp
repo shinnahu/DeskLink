@@ -236,10 +236,55 @@ void FileReceiver::OnCancel(uint32_t id) {
 }
 
 // ---------------------------------------------------------------- sending (PC -> phone)
+// One file to the phone: FILE_BEGIN, its data as fast as the phone takes it (4 MiB un-acknowledged at most), FILE_END,
+// then the phone's FILE_DONE. read fills buf with up to `want` bytes (got: how many). The phone's status (0 = saved),
+// or -1 when it didn't get there.
+static int SendOne(Session& s, const std::string& name, const std::string& mime, uint8_t kind, uint64_t size,
+                   const std::function<bool(uint8_t* buf, DWORD want, DWORD& got)>& read) {
+  const uint64_t kChunk = 256 * 1024, kWindow = 4ull * 1024 * 1024;
+  Bytes buf((size_t)std::min(kChunk, std::max<uint64_t>(size, 1)));
+  uint32_t id = s.NewOutgoingId();
+  s.RegisterOutgoing(id);
+  Writer b(msg::FILE_START);
+  b.u32(id).u64(size).str(name).str(mime);
+  if (kind != fkind::FILE) b.u8(kind);  // (older phones stop reading after the type: they take it as a file)
+  bool ok = s.SendBulk(std::move(b.b));
+  uint64_t sent = 0;
+  while (ok && sent < size) {
+    if (s.OutgoingCancelled(id) || !s.WaitForWindow(id, sent, kWindow)) {
+      ok = false;
+      break;
+    }
+    DWORD want = (DWORD)std::min<uint64_t>(buf.size(), size - sent), rd = 0;
+    if (!read(buf.data(), want, rd) || rd == 0) {
+      ok = false;
+      break;
+    }
+    Writer w(msg::FILE_DATA);
+    w.b.reserve(rd + 8);
+    w.u32(id).raw(buf.data(), rd);
+    if (!s.SendBulk(std::move(w.b))) ok = false;
+    sent += rd;
+  }
+  if (!ok) {
+    Writer c(msg::FILE_CANCEL);
+    c.u32(id);
+    s.SendBulk(std::move(c.b));
+    s.ForgetOutgoing(id);
+    Log("files: sending '%s' aborted", name.c_str());
+    return -1;
+  }
+  Writer e(msg::FILE_FINISH);
+  e.u32(id);
+  s.SendBulk(std::move(e.b));
+  int st = s.WaitForDone(id, 120000);
+  s.ForgetOutgoing(id);
+  Log("files: sent '%s' (%llu bytes) status %d", name.c_str(), (unsigned long long)size, st);
+  return st;
+}
+
 void SendFilesToPhone(std::shared_ptr<Session> s, std::vector<std::wstring> paths) {
   std::thread([s, paths] {
-    const uint64_t kChunk = 256 * 1024, kWindow = 4ull * 1024 * 1024;
-    Bytes buf((size_t)kChunk);
     for (auto& path : paths) {
       if (!s->alive()) break;
       HANDLE h;
@@ -255,49 +300,23 @@ void SendFilesToPhone(std::shared_ptr<Session> s, std::vector<std::wstring> path
       }
       LARGE_INTEGER sz{};
       GetFileSizeEx(h, &sz);
-      uint64_t size = (uint64_t)sz.QuadPart;
-      uint32_t id = s->NewOutgoingId();
-      s->RegisterOutgoing(id);
-      Writer b(msg::FILE_START);
-      b.u32(id).u64(size).str(W2U(name)).str(MimeFor(path));
-      bool ok = s->SendBulk(std::move(b.b));
-      uint64_t sent = 0;
-      while (ok && sent < size) {
-        if (s->OutgoingCancelled(id) || !s->WaitForWindow(id, sent, kWindow)) {
-          ok = false;
-          break;
-        }
-        DWORD want = (DWORD)std::min<uint64_t>(kChunk, size - sent), rd = 0;
-        {
-          UserContext uc;
-          if (!ReadFile(h, buf.data(), want, &rd, nullptr) || rd == 0) {
-            ok = false;
-            break;
-          }
-        }
-        Writer w(msg::FILE_DATA);
-        w.b.reserve(rd + 8);
-        w.u32(id).raw(buf.data(), rd);
-        if (!s->SendBulk(std::move(w.b))) ok = false;
-        sent += rd;
-      }
+      SendOne(*s, W2U(name), MimeFor(path), fkind::FILE, (uint64_t)sz.QuadPart, [h](uint8_t* buf, DWORD want, DWORD& got) {
+        UserContext uc;
+        return ReadFile(h, buf, want, &got, nullptr) != FALSE;
+      });
       CloseHandle(h);
-      if (!ok) {
-        Writer c(msg::FILE_CANCEL);
-        c.u32(id);
-        s->SendBulk(std::move(c.b));
-        s->ForgetOutgoing(id);
-        Log("files: sending '%s' aborted", W2U(name).c_str());
-        continue;
-      }
-      Writer e(msg::FILE_FINISH);
-      e.u32(id);
-      s->SendBulk(std::move(e.b));
-      int st = s->WaitForDone(id, 120000);
-      s->ForgetOutgoing(id);
-      Log("files: sent '%s' (%llu bytes) status %d", W2U(name).c_str(), (unsigned long long)size, st);
     }
   }).detach();
+}
+
+int SendBytesToPhone(Session& s, const std::string& name, const std::string& mime, uint8_t kind, const Bytes& data) {
+  size_t at = 0;
+  return SendOne(s, name, mime, kind, data.size(), [&](uint8_t* buf, DWORD want, DWORD& got) {
+    got = (DWORD)std::min<size_t>(want, data.size() - at);
+    memcpy(buf, data.data() + at, got);
+    at += got;
+    return true;
+  });
 }
 
 // Shows an "open files" dialog in the current (user) context.

@@ -44,5 +44,7 @@ class FileReceiver {
 
 std::wstring ReceivedFilesDir();
 void SendFilesToPhone(std::shared_ptr<Session> s, std::vector<std::wstring> paths);
+// Sends data to the phone as a file of that kind (fkind::*), on this thread: the phone's FILE_DONE status, or -1.
+int SendBytesToPhone(Session& s, const std::string& name, const std::string& mime, uint8_t kind, const Bytes& data);
 void PickAndSendFiles(std::shared_ptr<Session> s, bool replyNoneIfCancelled);
 int RunPickFilesHelper();

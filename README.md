@@ -4,8 +4,8 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 
 | part | file | size |
 |---|---|---|
-| Windows host (your PC) | `dist/DeskLinkHost.exe` | 687 KB (version 2.7), no install required to try |
-| Android app (your phone) | `dist/DeskLink.apk` | 190 KB (version 2.10) |
+| Windows host (your PC) | `dist/DeskLinkHost.exe` | 705 KB (version 2.9), no install required to try |
+| Android app (your phone) | `dist/DeskLink.apk` | 197 KB (version 2.12) |
 
 On GitHub, both files are attached to each release (*Releases*, on the right of the repository page) rather than kept
 in the code.
@@ -17,7 +17,7 @@ stand-in.
 
 | Your PCs | Connected | The ⋮ menu |
 |---|---|---|
-| <img src="docs/phone-pcs.png" alt="The list of PCs, with OFFICE-PC online" width="240"> | <img src="docs/phone-session.png" alt="Connected: the PC's screen with the pointer, the top bar and the shortcut bar" width="240"> | <img src="docs/phone-menu.png" alt="The ⋮ menu: send and get files, screen, Ctrl+Alt+Del, lock, Task Manager, Settings, Disconnect" width="240"> |
+| <img src="docs/phone-pcs.png" alt="The list of PCs, with OFFICE-PC online" width="240"> | <img src="docs/phone-session.png" alt="Connected: the PC's screen with the pointer, the top bar (with the screenshot camera) and the shortcut bar" width="240"> | <img src="docs/phone-menu.png" alt="The ⋮ menu: send and get files, screen, Ctrl+Alt+Del, lock, Task Manager, Settings, Disconnect" width="240"> |
 
 | All screens at once | Gaming mode |
 |---|---|
@@ -141,12 +141,20 @@ corrections are replayed on the PC, retyping only what changed. The keyboard see
 last moved (a click, the arrow keys, Enter), so it can go back over the word it just typed.
 
 **Top bar**: the PC's name, the connection dot and ping, and buttons for the touch mode (trackpad, direct touch or
-Gaming mode), the PC's screens, and the ⋮ menu. The screen buttons appear when the PC has more than one screen:
+Gaming mode), the PC's screens, a screenshot (the camera) and the ⋮ menu. The screen buttons appear when the PC has more
+than one screen:
 * **All screens** (two screens) shows every screen at once, laid out as Windows arranges them, black where there's no
   screen. Pinch to look closer. Tap it again, or the one-screen button next to it, to go back to the screen you were on.
   It needs DeskLink 2.3 on the PC.
 * **Next screen** (a screen and an arrow) goes to the next screen to the right, and after the last one back to the
   first.
+
+**Screenshot** (the camera in the top bar): the PC takes the screen you're looking at (with *All screens*, all of
+them) and sends it to the phone as a picture, saved in `Pictures/DeskLink`, where the gallery finds it. A note says
+*Screenshot saved*, with *Open*. It's the PC's own picture at its full size, sharper than the video, the whole screen
+however far you zoomed in, and without DeskLink's buttons or the pointer (like Windows' own screenshots). Over mobile
+data it costs what the picture weighs: a few hundred KB for a plain desktop, a few MB for a screen full of photos. It
+needs DeskLink 2.8 on the PC; with an older one the camera doesn't show.
 
 A short note at the bottom says which screen is showing (*Screen 2 of 2*, counting from the left). Notes like it, and
 the ones after switching the touch mode or turning the shortcut bar on or off (*Shortcut bar shown*), can be turned off
@@ -236,6 +244,7 @@ Text that password managers mark as private is never sent.
 * ⋮ → **Get file from PC**: a file picker opens on the PC screen; choose the file with the remote pointer. It is saved on the
   phone in `Downloads/DeskLink`.
 * From any app: **Share → DeskLink → Send to PC**.
+* Screenshots (the camera in the top bar) are saved on the phone in `Pictures/DeskLink`.
 
 **Connection status**: a dot in the toolbar (green, yellow, or red) plus the ping in ms. If the connection drops, the picture
 is dimmed with *Connection lost — reconnecting…* and touches are ignored until it's back. It reconnects on its own and
@@ -264,6 +273,13 @@ Then:
 
 It needs DeskLink 2.6 on the PC. The driver is Parsec's own (closed source), so DeskLink doesn't include it. A dummy
 plug (a DisplayPort or HDMI "headless display emulator") in a free port of the graphics card also works, with no driver.
+
+**If the picture doesn't come** (*Waiting for the screen…* while the PC sends it): the phone's video decoder can take
+the picture and show nothing. Since 2.12, after 4 seconds of that the phone tries its next decoder, its software one
+last, and the waiting screen says *The phone's video decoder gave no picture. Trying another one…*. On the software
+decoder (slower, more battery) a note says so; closing DeskLink from Recent apps tries the faster one again. *Show
+stats* names the decoder in use, also over the waiting screen, and with DeskLink 2.9 on the PC every decoder change is
+written to the PC's log (lines with `phone:`).
 
 ## 4. Away from home (mobile data)
 
@@ -445,6 +461,29 @@ from Windows, those marked silent, frames sent), and the phone's stats show the 
 2.10 also stops a second copy of a file sent from the PC being named "name.apk (1)": Windows has no type for .apk, so
 the PC sends a generic one, and Android, finding it doesn't match the name, kept the whole name as the base. The phone
 now gives Android the type it knows for the name's extension, and copies are "name (1).apk".
+Version 2.8 (PC) and 2.11 (phone) add screenshots (*Screenshot*, above). The PC copies the picture its capture already
+holds, before it's made smaller for the video, and Windows Imaging Component makes it a PNG; it travels like a file
+from the PC, marked as a screenshot, and the phone saves it with the pictures. Over 127.0.0.1 the PC answered with
+"Screenshot 2026-11-11 001844.png", a 1920×1080 PNG of the screen shown (145 KB), the right colors and nothing
+missing: the copy took under a millisecond, the PNG 31 ms. Every other protocol check still passes (20 now). On the
+phone, unit tests check where it goes (`Pictures/DeskLink`, as a PNG, through Android's media store) and that other
+files still go to `Download/DeskLink`, and the README's pictures, redrawn by the app's code, show the camera. Not yet
+tried on the phone.
+Version 2.9 (PC) and 2.12 (phone) end a wait for the screen that didn't end. On 2026-11-14 the phone stayed on *Waiting
+for the screen…* from 10:51 to 11:08: through five reconnects on the virtual screen, and after the monitor was switched
+back on. The PC's log showed its capture running and the phone acknowledging the frames as they came (the bitrate rose
+from 8 to 20 Mbps, which takes acknowledged frames). The phone's stats, then drawn under the waiting screen, showed 17.8
+Mbps coming in, 0 frames a second shown, and its hardware decoder (OMX.qcom.video.decoder.avc) running. The app had no
+way out: it waited for a picture from that decoder for as long as frames came. The next session, at 11:10, showed the
+picture at 40 fps with the same decoder. The phone now gives up on a decoder that shows no picture 4 s after a keyframe
+went in, that is stuck 4 s in one call, or when none would start for 4 s, and tries the next one: every H.264 decoder
+the phone lists, hardware first, its software decoder last. The one given up on is tried last for 10 minutes. A decoder
+now lets go of the picture's surface before the surface goes, and the next one waits for that (1.5 s at most, then it
+draws on a new surface). What the decoders do goes to the PC's log as `phone:` lines (a new message, CLIENT_LOG; older
+PCs ignore it), and the stats are drawn over the waiting screen. Checked with unit tests (when a decoder is given up on;
+which decoder comes next, with OMX names as aliases of the Codec2 ones) and, over 127.0.0.1, a line from the test
+client written to the PC's log; every protocol check passes (21 now). Switching decoders hasn't been seen on a phone:
+what happened on 11-14 can't be made to happen on purpose.
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del);
@@ -453,7 +492,11 @@ Not yet verified:
 * 2.9.4's predictive text beyond "program.exe" (other words, other keyboards such as Gboard);
 * 2.9.5 on the phone: the Space key, and the bar hidden with the keyboard open;
 * the PC's sound on the phone (2.7 / 2.10): how far behind the picture it is, over mobile data, and a monitor with the
-  only speakers switched off.
+  only speakers switched off;
+* screenshots on the phone (2.8 / 2.11): the camera, the picture in the gallery, all screens, a monitor turned to
+  portrait, and the lock screen with the installed service;
+* 2.12 on the phone: the picture as before, the stats over the waiting screen, the decoder's `phone:` lines in the PC's
+  log (2.9), and a decoder given up on (seen once, on 2026-11-14).
 
 ## Build from source
 

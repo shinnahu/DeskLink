@@ -89,6 +89,21 @@ void Streamer::SelectMonitor(int idx) {
   reinitRequested_ = true;
 }
 
+void Streamer::RequestShot(ShotDone done) {
+  if (th_.joinable()) {  // (started and stopped on this thread: it can't stop meanwhile)
+    {
+      std::lock_guard<std::mutex> lk(mu_);
+      shots_.push_back({std::move(done), NowMs()});
+    }
+    cv_.notify_all();
+    return;
+  }
+  Shot s;
+  s.fail = shotfail::NOT_NOW;
+  s.why = "the stream isn't running";
+  done(std::move(s));
+}
+
 StreamStats Streamer::Stats() {
   std::lock_guard<std::mutex> lk(mu_);
   StreamStats s = stats_;
@@ -149,6 +164,7 @@ void Streamer::Teardown() {
   vpEnum_.Reset();
   vctx_.Reset();
   vdev_.Reset();
+  shotTex_.Reset();
   capTex_.Reset();
   srcs_.clear();  // their duplications, staging textures and other graphics cards' devices
   all_ = false;
@@ -711,6 +727,97 @@ bool Streamer::EncodeAndSend(bool forceKey) {
   return true;
 }
 
+// ---------------------------------------------------------------- screenshots
+// Served from capTex_ once the stream has a picture; one asked for 3 s ago without a picture is told why there's none
+// (the screen is starting over, the PC is locked, no screen is on).
+void Streamer::ServeShots(uint64_t now) {
+  std::vector<ShotWait> ready, late;
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    if (shots_.empty()) return;
+    if (pipelineOk_ && haveContent_) {
+      ready.swap(shots_);
+    } else {
+      for (size_t i = 0; i < shots_.size();) {
+        if (now - shots_[i].since < 3000) {
+          i++;
+          continue;
+        }
+        late.push_back(std::move(shots_[i]));
+        shots_.erase(shots_.begin() + (ptrdiff_t)i);
+      }
+    }
+  }
+  if (!ready.empty()) {
+    Shot shot;
+    uint64_t t0 = NowMs();
+    if (GrabShot(shot)) {
+      Log("capture: screenshot %dx%d taken in %llu ms", shot.w, shot.h, (unsigned long long)(NowMs() - t0));
+    } else {
+      shot.w = shot.h = 0;
+      shot.px.clear();
+      shot.fail = shotfail::FAILURE;
+      Log("capture: screenshot failed: %s", shot.why.c_str());
+    }
+    for (size_t i = 0; i + 1 < ready.size(); i++) ready[i].done(Shot(shot));  // asked twice at once: a copy each
+    ready.back().done(std::move(shot));
+  }
+  for (auto& w : late) {
+    Shot s;
+    s.fail = shotfail::NOT_NOW;
+    s.why = statusText_.empty() ? "there's no picture yet" : statusText_;
+    Log("capture: no screenshot: %s", s.why.c_str());
+    w.done(std::move(s));
+  }
+}
+
+// capTex_ where the CPU can read it, the way it is on the desktop: one turned screen comes as the panel scans it (the
+// video processor turns it for the stream), all screens are already the right way round.
+bool Streamer::GrabShot(Shot& out) {
+  if (!shotTex_) {
+    D3D11_TEXTURE2D_DESC sd = capDesc_;
+    sd.Usage = D3D11_USAGE_STAGING;
+    sd.BindFlags = 0;
+    sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    sd.MiscFlags = 0;
+    HRESULT hr = dev_->CreateTexture2D(&sd, nullptr, &shotTex_);
+    if (FAILED(hr)) {
+      char b[64];
+      snprintf(b, sizeof(b), "no video memory for it (0x%08x)", (unsigned)hr);
+      out.why = b;
+      return false;
+    }
+  }
+  ctx_->CopyResource(shotTex_.Get(), capTex_.Get());
+  D3D11_MAPPED_SUBRESOURCE m{};
+  HRESULT hr = ctx_->Map(shotTex_.Get(), 0, D3D11_MAP_READ, 0, &m);
+  if (FAILED(hr)) {
+    char b[64];
+    snprintf(b, sizeof(b), "the picture can't be read (0x%08x)", (unsigned)hr);
+    out.why = b;
+    return false;
+  }
+  auto unmap = MakeScopeExit([&] { ctx_->Unmap(shotTex_.Get(), 0); });
+  int w = (int)capDesc_.Width, h = (int)capDesc_.Height;
+  DXGI_MODE_ROTATION rot = !all_ && !srcs_.empty() ? srcs_[0].rot : DXGI_MODE_ROTATION_IDENTITY;
+  bool sideways = rot == DXGI_MODE_ROTATION_ROTATE90 || rot == DXGI_MODE_ROTATION_ROTATE270;
+  out.w = sideways ? h : w;
+  out.h = sideways ? w : h;
+  try {
+    out.px.resize((size_t)out.w * out.h);
+  } catch (const std::bad_alloc&) {
+    out.why = "out of memory";
+    return false;
+  }
+  if (Turned(rot)) {
+    Turn((const uint8_t*)m.pData, m.RowPitch, w, h, rot, out.px.data(), out.w, out.h);
+  } else {
+    for (int y = 0; y < h; y++)
+      memcpy(out.px.data() + (size_t)y * w, (const uint8_t*)m.pData + (size_t)y * m.RowPitch, (size_t)w * 4);
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------- cursor
 static uint32_t Fnv(const uint8_t* p, size_t n, uint32_t h = 2166136261u) {
   for (size_t i = 0; i < n; i++) h = (h ^ p[i]) * 16777619u;
@@ -920,6 +1027,7 @@ void Streamer::Run() {
     uint64_t now = NowMs();
     uint64_t loopDelta = now - lastLoopMs;
     lastLoopMs = now;
+    ServeShots(now);  // from the picture the last round took
 
     if (paused) {
       if (!pausedSince) pausedSince = now;

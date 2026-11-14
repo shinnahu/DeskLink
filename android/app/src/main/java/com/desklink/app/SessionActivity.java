@@ -21,6 +21,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PersistableBundle;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.Surface;
@@ -83,6 +84,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     private TextView titleText, pingText;
     private ImageButton btnMode;
     private ImageButton btnScreens, btnNextScreen; // the PC's screens: all at once, the next one
+    private ImageButton btnShot; // a screenshot of the PC's screen (PCs that take them)
     private FrameLayout handle;
     private ShortcutBar shortcutBar;
     // bottom-right dock: a small [shortcuts][keyboard] pill, or the full shortcut bar with those two at its end
@@ -98,6 +100,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     private TextView snackText, snackAction;
     private ProgressBar snackProgress;
     private TextView statsText;
+    private View flash; // the picture blinks white when a screenshot is asked for
 
     // state
     private final Viewport viewport = new Viewport();
@@ -105,7 +108,17 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     private volatile VideoDecoder decoder;
     private final AudioPlayer audio = new AudioPlayer(); // the PC's sound
     private boolean noSoundShown; // "The PC has no sound output" was said (again once there was sound)
-    private Surface surface;
+    private VideoSurface videoSurface;   // the TextureView's surface (null until it has one)
+    private VideoSurface decoderSurface; // the surface the decoder draws on
+    private boolean started;             // between onStart and onStop: the decoder may run
+    private boolean waitingForSurface;   // the next decoder waits for the last one to let go of the surface
+    private boolean decoderGaveUp;       // a decoder gave no picture while waiting for this one (the overlay says so)
+    private boolean softwareNoteShown;
+    // the surfaces' bookkeeping outlives onDestroy (which clears `main`): a codec lets go of its surface after that
+    private final Handler surfaceHandler = new Handler(Looper.getMainLooper());
+    private final Object pcLogLock = new Object();
+    private long pcLogMinute;
+    private int pcLogCount;
     private Messages.VideoFormat format;          // main thread
     private volatile Messages.VideoFormat netFormat; // network thread (detects format changes)
     private Messages.HostInfo hostInfo;
@@ -136,6 +149,8 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     private boolean pcCursorShown = true; // the PC's pointer is on show (a game playing hides it)
     private final ArrayDeque<Uri> uploads = new ArrayDeque<>();
     private boolean uploading;
+    private boolean shotPending; // a screenshot was asked for and hasn't come yet
+    private long shotAskedAt;
     private final Map<Integer, FileSaver.Target> downloads = new ConcurrentHashMap<>();
     private final Matrix matrix = new Matrix();
     private Object backCallback;
@@ -206,6 +221,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     @Override
     protected void onStart() {
         super.onStart();
+        started = true;
         startDecoder(); // released in onStop; the TextureView keeps its surface
         if (session != null) session.onForeground();
         if (clipboard != null) clipboard.addPrimaryClipChangedListener(clipListener);
@@ -224,6 +240,9 @@ public final class SessionActivity extends Activity implements HostConnection.Li
             pad.releaseAll();           // ...and for gamepad buttons being held
             session.onBackground();     // then RELEASE_ALL + STREAM_PAUSE
         }
+        started = false;
+        waitingForSurface = false;
+        surfaceHandler.removeCallbacks(surfaceTimeout);
         stopDecoder();
         audio.stop(); // the PC stops its sound with the stream, and says its format again when it resumes
     }
@@ -322,6 +341,11 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         cursorView = new CursorView(this);
         root.addView(cursorView, new FrameLayout.LayoutParams(match));
 
+        flash = new View(this);
+        flash.setBackgroundColor(Color.WHITE);
+        flash.setVisibility(View.GONE);
+        root.addView(flash, new FrameLayout.LayoutParams(match));
+
         touchLayer = new View(this);
         touchLayer.setOnTouchListener((v, e) -> touch.onTouch(e));
         root.addView(touchLayer, new FrameLayout.LayoutParams(match));
@@ -355,11 +379,12 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         statsText.setBackground(Ui.rounded(0x99000000, Ui.dp(this, 6)));
         statsText.setPadding(Ui.dp(this, 8), Ui.dp(this, 4), Ui.dp(this, 8), Ui.dp(this, 4));
         statsText.setVisibility(prefs.showStats() ? View.VISIBLE : View.GONE);
-        root.addView(statsText, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP | Gravity.START));
 
         buildOverlay();
         root.addView(overlay, new FrameLayout.LayoutParams(match));
+        // above the overlay: readable while the session waits for the screen, which is when they tell the most
+        root.addView(statsText, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.START));
 
         buildSnack();
         root.addView(snack, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
@@ -534,6 +559,9 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         btnScreens = addToolButton(R.drawable.ic_screens_all, R.string.tb_screens_all, v -> toggleAllScreens());
         btnNextScreen = addToolButton(R.drawable.ic_screen_next, R.string.tb_screen_next, v -> nextScreen());
         refreshScreenButtons();
+        // a screenshot: the PC takes the screen shown at full size and sends it, saved with the phone's pictures
+        btnShot = addToolButton(R.drawable.ic_screenshot, R.string.tb_screenshot, v -> takeScreenshot());
+        refreshShotButton();
         addToolButton(R.drawable.ic_more, R.string.tb_menu, this::showMenu);
         // the bar stays until it's hidden here; the handle at the top brings it back
         addToolButton(R.drawable.ic_expand_less, R.string.tb_hide, v -> {
@@ -627,6 +655,36 @@ public final class SessionActivity extends Activity implements HostConnection.Li
                 if (order.get(i).index == index) return getString(R.string.screen_n_of, i + 1, order.size());
         }
         return getString(R.string.menu_monitor);
+    }
+
+    /** The screenshot button shows once the PC is known to take screenshots (PC 2.8 and later). */
+    private void refreshShotButton() {
+        if (btnShot == null) return;
+        btnShot.setVisibility(hostInfo != null && hostInfo.can(Protocol.CAP_SCREENSHOT) ? View.VISIBLE : View.GONE);
+    }
+
+    /** Top bar: the PC sends a picture of the screen shown, at full size; it's saved in Pictures/DeskLink. */
+    private void takeScreenshot() {
+        HostConnection c = session != null ? session.connection() : null;
+        if (c == null || state != RemoteSession.State.LIVE) {
+            showSnack(getString(R.string.files_not_connected), -1, null, null, 2500);
+            return;
+        }
+        long now = SystemClock.uptimeMillis();
+        if (shotPending && now - shotAskedAt < 5000) return; // the one asked for is on its way
+        shotPending = true;
+        shotAskedAt = now;
+        c.requestScreenshot();
+        blink();
+        showSnack(getString(R.string.shot_taking), -1, null, null, 6000);
+    }
+
+    /** A quick white blink over the picture, as phones do for their own screenshots. */
+    private void blink() {
+        flash.animate().cancel();
+        flash.setAlpha(0.6f);
+        flash.setVisibility(View.VISIBLE);
+        flash.animate().alpha(0f).setDuration(300).withEndAction(() -> flash.setVisibility(View.GONE)).start();
     }
 
     /** The mode button shows the mode in use: a mouse (trackpad), a hand (direct touch) or a gamepad. */
@@ -922,6 +980,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
                     spinner = true;
                 } else {
                     title = getString(R.string.conn_waiting_video);
+                    if (decoderGaveUp) detail = getString(R.string.conn_decoder_retry);
                     spinner = true;
                 }
                 bg = ever && format != null ? 0xD9000000 : Color.BLACK;
@@ -1036,6 +1095,8 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         hostInfo = c.hostInfo();
         updateCameraMode(); // whether this PC can take mouse moves for a game's camera
         refreshScreenButtons(); // shown when it has more than one screen
+        refreshShotButton(); // shown when it takes screenshots
+        shotPending = false;
         // what reaches this PC over mobile data: said once, and again whenever it changes
         final int rf = hostInfo != null ? hostInfo.remoteFlags : -1;
         if (rf >= 0 && (rf & Protocol.REMOTE_CHECKING) == 0 && rf != prefs.remoteShown(hostId)) {
@@ -1052,6 +1113,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         shapeId = -1;
         cursorView.setShape(null);
         hostStatusFlags = 0;
+        decoderGaveUp = false;
         VideoDecoder d = decoder;
         if (d != null) d.resetStream();
         // Always START (RemoteSession pauses right after when we're in the background, and a later RESUME
@@ -1190,16 +1252,25 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     }
 
     @Override
-    public HostConnection.IncomingFileSink onIncomingFile(int id, String name, long size, String mime) {
+    public HostConnection.IncomingFileSink onIncomingFile(int id, String name, long size, String mime, int kind) {
+        final boolean shot = kind == Protocol.FILE_KIND_SCREENSHOT; // the screenshot asked for: with the pictures
         try {
-            FileSaver.Target t = FileSaver.create(this, name, mime);
+            FileSaver.Target t = FileSaver.create(this, name, mime, shot);
             downloads.put(id, t);
-            main.post(() -> showSnack(getString(R.string.files_receiving, t.name, 0), 0, null, null, 0));
+            main.post(() -> showSnack(receivingText(t, 0), 0, null, null, 0));
             return t;
         } catch (IOException | RuntimeException e) {
-            main.post(() -> showSnack(getString(R.string.files_receive_failed, name), -1, null, null, 4000));
+            main.post(() -> {
+                if (shot) shotPending = false;
+                showSnack(shot ? getString(R.string.shot_save_failed) : getString(R.string.files_receive_failed, name),
+                        -1, null, null, 4000);
+            });
             return null;
         }
+    }
+
+    private String receivingText(FileSaver.Target t, int pct) {
+        return t.picture ? getString(R.string.shot_taking) : getString(R.string.files_receiving, t.name, pct);
     }
 
     @Override
@@ -1207,7 +1278,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         final FileSaver.Target t = downloads.get(id);
         if (t == null) return;
         final int pct = size > 0 ? (int) Math.min(100, received * 100 / size) : 0;
-        main.post(() -> showSnack(getString(R.string.files_receiving, t.name, pct), pct, null, null, 0));
+        main.post(() -> showSnack(receivingText(t, pct), pct, null, null, 0));
     }
 
     @Override
@@ -1215,23 +1286,84 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         final FileSaver.Target t = downloads.remove(id);
         if (t == null) return;
         main.post(() -> {
+            if (t.picture) shotPending = false;
             if (status == Protocol.FD_OK) {
                 if (t.uri != null) {
-                    showSnack(getString(R.string.files_received, t.name), -1, getString(R.string.open), () -> openFile(t), 8000);
+                    showSnack(t.picture ? getString(R.string.shot_saved) : getString(R.string.files_received, t.name), -1,
+                            getString(R.string.open), () -> openFile(t), 8000);
                 } else {
                     showSnack(getString(R.string.files_received_app, t.where()), -1, null, null, 8000);
                 }
             } else {
-                showSnack(getString(R.string.files_receive_failed, t.name), -1, null, null, 5000);
+                showSnack(t.picture ? getString(R.string.shot_save_failed) : getString(R.string.files_receive_failed, t.name),
+                        -1, null, null, 5000);
             }
+        });
+    }
+
+    @Override
+    public void onScreenshotFailed(int reason, String detail) {
+        main.post(() -> {
+            shotPending = false;
+            showSnack(reason == Protocol.SHOT_NOT_NOW ? getString(R.string.shot_not_now)
+                    : getString(R.string.shot_failed, detail == null || detail.isEmpty() ? "?" : detail), -1, null, null, 6000);
         });
     }
 
     // =================================================================== decoder
 
+    /**
+     * The TextureView's surface. It goes once the view is done with it and no decoder draws on it any more: a codec
+     * whose surface is taken away while it still holds it can hang, and a codec can't draw on a surface another one
+     * still holds. Main thread.
+     */
+    private final class VideoSurface {
+        final SurfaceTexture st;
+        final Surface surface;
+        int users;        // decoders drawing on it, or still letting go of it
+        boolean viewGone; // the TextureView is done with it
+
+        VideoSurface(SurfaceTexture st) {
+            this.st = st;
+            surface = new Surface(st);
+        }
+
+        /** A decoder let go of it. */
+        void done() {
+            users--;
+            if (viewGone) {
+                releaseIfUnused();
+            } else if (users == 0 && this == videoSurface && waitingForSurface) {
+                waitingForSurface = false;
+                surfaceHandler.removeCallbacks(surfaceTimeout);
+                startDecoder();
+            }
+        }
+
+        void viewGone() {
+            viewGone = true;
+            releaseIfUnused();
+        }
+
+        private void releaseIfUnused() {
+            if (users > 0) return;
+            surface.release();
+            st.release();
+        }
+    }
+
+    // The last decoder didn't let go of the surface in time (a codec call hangs): the picture gets a new surface.
+    private final Runnable surfaceTimeout = () -> {
+        if (!waitingForSurface) return;
+        waitingForSurface = false;
+        if (!started || decoder != null || isFinishing()) return;
+        pcLog("the last decoder didn't let go of the picture's surface in 1.5 s: drawing on a new one");
+        newVideoView();
+    };
+
     @Override
     public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
-        surface = new Surface(st);
+        videoSurface = new VideoSurface(st);
         viewport.setView(w, h);
         updateTransform();
         startDecoder();
@@ -1245,37 +1377,109 @@ public final class SessionActivity extends Activity implements HostConnection.Li
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture st) {
-        stopDecoder();
-        if (surface != null) {
-            surface.release();
-            surface = null;
-        }
-        return true;
+        VideoSurface vs = videoSurface;
+        if (vs == null || vs.st != st) return true; // not the one in use (none should be)
+        if (decoderSurface == vs) stopDecoder();
+        videoSurface = null;
+        waitingForSurface = false;
+        surfaceHandler.removeCallbacks(surfaceTimeout);
+        vs.viewGone(); // released here once no decoder holds it
+        return false;
     }
 
     @Override
     public void onSurfaceTextureUpdated(SurfaceTexture st) {}
 
     private void startDecoder() {
-        if (surface == null || decoder != null) return;
-        VideoDecoder d = new VideoDecoder(surface, this);
+        VideoSurface vs = videoSurface;
+        if (!started || vs == null || decoder != null || isFinishing()) return;
+        if (vs.users > 0) {
+            // the last decoder is still letting go of this surface: started once it has (VideoSurface.done), or on a
+            // new surface if it doesn't in time
+            if (!waitingForSurface) {
+                waitingForSurface = true;
+                surfaceHandler.postDelayed(surfaceTimeout, 1500);
+            }
+            return;
+        }
+        VideoDecoder d = new VideoDecoder(vs.surface, this);
         if (format != null) d.setSize(format.width, format.height);
+        vs.users++;
+        decoderSurface = vs;
         d.start();
         decoder = d;
         HostConnection c = session == null ? null : session.connection();
         if (c != null) c.requestKeyframe();
     }
 
+    /** The decoder lets go of its codec on its own thread, without keeping this one waiting; its surface stays till then. */
     private void stopDecoder() {
         VideoDecoder d = decoder;
+        VideoSurface vs = decoderSurface;
         decoder = null;
-        if (d != null) d.release();
+        decoderSurface = null;
+        if (d == null) return;
+        d.release(() -> surfaceHandler.post(() -> {
+            if (vs != null) vs.done();
+        }));
     }
+
+    /** A new TextureView: the next decoder draws on a new surface (one whose codec hangs may never let go of the old). */
+    private void newVideoView() {
+        TextureView old = videoView;
+        TextureView v = new TextureView(this);
+        v.setSurfaceTextureListener(this);
+        root.addView(v, root.indexOfChild(old), new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        videoView = v;
+        root.removeView(old); // its surface goes once no decoder holds it; the new one comes with onSurfaceTextureAvailable
+        updateTransform();
+    }
+
+    /**
+     * The decoder gave no picture (DecoderWatch): the next one takes over, on a new surface when the old one may be
+     * the trouble. The one given up on is tried last for a while (closing the app brings it back sooner).
+     */
+    private void giveUpOnDecoder(DecoderWatch.Trouble t) {
+        VideoDecoder.gaveNothing(t.codec);
+        decoderGaveUp = true;
+        pcLog("gave up on " + (t.codec.isEmpty() ? "the decoder" : t.codec) + ": " + t.why + "; next: "
+                + VideoDecoder.next());
+        stopDecoder();
+        if (t.surface) newVideoView();
+        else startDecoder(); // once the old one has let go of the surface
+        refreshOverlay();
+    }
+
+    /** A line for the PC's log (DeskLink 2.9 or later on the PC writes it there; older ones ignore it). Any thread. */
+    private void pcLog(String line) {
+        Log.i("DeskLink", line);
+        synchronized (pcLogLock) {
+            long now = SystemClock.elapsedRealtime();
+            if (now - pcLogMinute >= 60_000) {
+                pcLogMinute = now;
+                pcLogCount = 0;
+            }
+            if (++pcLogCount > 20) return; // a decoder that keeps failing has said so in its first lines
+        }
+        RemoteSession s = session;
+        HostConnection c = s == null ? null : s.connection();
+        if (c != null) c.clientLog(line);
+    }
+
+    @Override
+    public void onDecoderEvent(String line) { pcLog(line); }
 
     @Override
     public void onFirstFrame() {
         main.post(() -> {
             if (session != null) session.firstFrame();
+            VideoDecoder d = decoder;
+            if (decoderGaveUp && d != null && d.software() && !softwareNoteShown) {
+                softwareNoteShown = true;
+                showSnack(getString(R.string.note_software_decoder), -1, null, null, 10000);
+            }
+            decoderGaveUp = false;
         });
     }
 
@@ -2008,6 +2212,12 @@ public final class SessionActivity extends Activity implements HostConnection.Li
             waitingSince = System.currentTimeMillis();
             c.requestKeyframe(); // safety net if the first keyframe got lost in a decoder reset
         }
+        // a decoder that takes the video and gives no picture is given up on, rather than waited for forever
+        VideoDecoder vd = decoder;
+        if (vd != null && c != null && (state == RemoteSession.State.WAITING_VIDEO || state == RemoteSession.State.LIVE)) {
+            DecoderWatch.Trouble t = vd.trouble();
+            if (t != null) giveUpOnDecoder(t);
+        }
         pingText.setText(c != null && rtt >= 0 ? String.format(Locale.US, "%d ms", rtt) : "");
         int fps = framesRendered.getAndSet(0);
         long bytes = c != null ? c.bytesReceived() : 0;
@@ -2018,7 +2228,8 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         if (statsText.getVisibility() == View.VISIBLE) {
             String mbps = String.format(Locale.US, "%.1f", delta * 8 / 1_000_000.0);
             int w = format != null ? format.width : 0, h = format != null ? format.height : 0;
-            String dec = decoder != null ? decoder.codecName() : "";
+            VideoDecoder sd = decoder;
+            String dec = sd != null ? sd.codecName() + (sd.software() ? " (software)" : "") : "";
             String sound = audio.started() ? audio.describe() : soundWanted() ? "sound: nothing from the PC yet" : "";
             statsText.setText(getString(R.string.stats_fmt, fps, mbps, Math.max(0, rtt), w, h) + (dec.isEmpty() ? "" : "\n" + dec)
                     + (sound.isEmpty() ? "" : "\n" + sound));

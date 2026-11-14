@@ -5,10 +5,13 @@
 
 #include "app.h"
 #include "protocol.h"
+#include "screenshot.h"
 #include "ui.h"
 
 static constexpr size_t kBulkQueueCap = 2 * 1024 * 1024;
 static constexpr size_t kAudioQueueCap = 50;  // AAC frames: about a second
+static constexpr int kPhoneLogPerMinute = 30;  // CLIENT_LOG lines written to the log; more are dropped
+static constexpr size_t kPhoneLogMax = 400;    // bytes of one line
 
 Session::Session(std::unique_ptr<SecureChannel> ch, PairedDevice dev) : ch_(std::move(ch)), dev_(std::move(dev)) {
   lastRecv_ = NowMs();
@@ -288,6 +291,14 @@ void Session::Handle(const Bytes& m) {
       if (r.ok) streamer_->SelectMonitor(idx == kMonitorPrimary ? -1 : idx == kMonitorAll ? kAllScreens : idx);
       break;
     }
+    case msg::SCREENSHOT: {
+      // taken on the capture thread, then made into a PNG and sent like a file on a thread of its own
+      std::weak_ptr<Session> weak = weak_from_this();
+      streamer_->RequestShot([weak](Shot&& shot) {
+        if (auto s = weak.lock()) SendShot(s, std::move(shot));
+      });
+      break;
+    }
     case msg::MOUSE_MOVE: {
       InputEvent e;
       e.type = InputEvent::Move;
@@ -420,6 +431,29 @@ void Session::Handle(const Bytes& m) {
     case msg::PONG: {
       uint64_t t = r.u64();
       if (r.ok && t <= NowMs()) rttMs_ = (int)(NowMs() - t);
+      break;
+    }
+    case msg::CLIENT_LOG: {
+      // what the phone's side did (its video decoder): written here, where it can be read after the fact
+      size_t n = 0;
+      const uint8_t* p = r.rest(n);
+      uint64_t now = NowMs();
+      if (now - phoneLogMinute_ >= 60000) {
+        if (phoneLogLines_ > kPhoneLogPerMinute)
+          Log("session %s: phone: (%d more lines that minute left out)", dev_.name.c_str(),
+              phoneLogLines_ - kPhoneLogPerMinute);
+        phoneLogMinute_ = now;
+        phoneLogLines_ = 0;
+      }
+      if (n == 0 || ++phoneLogLines_ > kPhoneLogPerMinute) break;
+      if (n > kPhoneLogMax) {
+        n = kPhoneLogMax;
+        while (n > 0 && (p[n] & 0xC0) == 0x80) n--;  // not in the middle of a character
+      }
+      std::string line((const char*)p, n);
+      for (char& ch : line)
+        if ((unsigned char)ch < 0x20 || ch == 0x7F) ch = ' ';
+      Log("session %s: phone: %s", dev_.name.c_str(), line.c_str());
       break;
     }
     case msg::BYE:
