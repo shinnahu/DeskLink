@@ -1589,6 +1589,38 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         }
     }
 
+    /**
+     * Text the keyboard pasted. A PC with PASTE (2.10+) pastes it with Ctrl+V when the clipboard is shared, and types it
+     * otherwise; for an older PC it's typed here. Typed, each line break is Shift+Enter: a new line in chat boxes, where
+     * Enter sends the message.
+     */
+    @Override
+    public void pasteText(String text) {
+        HostConnection c = session.connection();
+        if (c == null || !isLive()) return;
+        if (shortcutBar.modifiersActive()) { // Ctrl and the rest held: key by key, as typing does
+            typeText(text);
+            return;
+        }
+        shortcutBar.markUsed();
+        Messages.HostInfo hi = c.hostInfo();
+        if (hi != null && hi.can(Protocol.CAP_PASTE) && c.paste(text)) return;
+        String[] lines = KeyInputView.lines(text);
+        for (int i = 0; i < lines.length; i++) {
+            if (i > 0) {
+                c.key(Vk.SHIFT, true);
+                c.keyTap(Vk.RETURN);
+                c.key(Vk.SHIFT, false);
+            }
+            c.text(lines[i]);
+        }
+    }
+
+    @Override
+    public boolean isClipboard(String text) {
+        return prefs.clipboardSync() && clipSync != null && clipSync.holds(text);
+    }
+
     @Override
     public void keyTap(int vk) {
         HostConnection c = session.connection();

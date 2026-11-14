@@ -143,7 +143,7 @@ bool ReadClipboardText(std::string& out) {
   return ok;
 }
 
-void WriteClipboardText(const std::string& utf8) {
+bool WriteClipboardText(const std::string& utf8) {
   std::wstring in = U2W(utf8), w;
   w.reserve(in.size() + 16);
   for (size_t i = 0; i < in.size(); i++) {
@@ -151,18 +151,34 @@ void WriteClipboardText(const std::string& utf8) {
     w.push_back(in[i]);
   }
   HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, (w.size() + 1) * sizeof(wchar_t));
-  if (!hg) return;
+  if (!hg) return false;
   memcpy(GlobalLock(hg), w.c_str(), (w.size() + 1) * sizeof(wchar_t));
   GlobalUnlock(hg);
   if (!OpenClip()) {
     GlobalFree(hg);
-    return;
+    return false;
   }
   EmptyClipboard();
-  if (!SetClipboardData(CF_UNICODETEXT, hg)) GlobalFree(hg);
+  bool ok = SetClipboardData(CF_UNICODETEXT, hg) != nullptr;
+  if (!ok) GlobalFree(hg);
+#ifdef DESKLINK_TESTING
+  if (ok && g_opt.testPrivateClipboard && g_cfExclude) {  // the convention password managers use
+    if (HGLOBAL hx = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD))) {
+      *(DWORD*)GlobalLock(hx) = 0;
+      GlobalUnlock(hx);
+      if (!SetClipboardData(g_cfExclude, hx)) GlobalFree(hx);
+    }
+  }
+#endif
   CloseClipboard();
   g_ourClipSeq = GetClipboardSequenceNumber();
+  return ok;
 }
+
+struct ClipWrite {  // WM_SET_CLIP
+  std::string text;
+  std::function<void(bool)> done;
+};
 
 // ---------------------------------------------------------------- tray
 void UpdateTrayTip() {
@@ -840,9 +856,10 @@ LRESULT CALLBACK MainProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
       UpdateTrayTip();
       return 0;
     case WM_SET_CLIP: {
-      auto* s = (std::string*)lp;
-      WriteClipboardText(*s);
-      delete s;
+      auto* w = (ClipWrite*)lp;
+      bool ok = WriteClipboardText(w->text);
+      if (w->done) w->done(ok);
+      delete w;
       return 0;
     }
     case WM_CLIP_PUSH: {
@@ -929,7 +946,11 @@ void Post(UINT msg, WPARAM wp, LPARAM lp) {
   if (!g_main || !PostMessageW(g_main, msg, wp, lp)) {
     // UI not running: free heap payloads
     if (msg == WM_SESS_START || msg == WM_PAIR_DONE || msg == WM_FILE_RX) delete (std::wstring*)lp;
-    if (msg == WM_SET_CLIP) delete (std::string*)lp;
+    if (msg == WM_SET_CLIP) {
+      auto* w = (ClipWrite*)lp;
+      if (w->done) w->done(false);
+      delete w;
+    }
     if (msg == WM_BALLOON) delete (std::pair<std::wstring, std::wstring>*)lp;
   }
 }
@@ -1059,7 +1080,9 @@ void Quit() {
 
 void SessionStarted(const std::string& deviceName) { Post(WM_SESS_START, 0, (LPARAM) new std::wstring(U2W(deviceName))); }
 void SessionEnded() { Post(WM_SESS_END, 0, 0); }
-void SetClipboardText(const std::string& utf8) { Post(WM_SET_CLIP, 0, (LPARAM) new std::string(utf8)); }
+void SetClipboardText(const std::string& utf8, std::function<void(bool)> done) {
+  Post(WM_SET_CLIP, 0, (LPARAM) new ClipWrite{utf8, std::move(done)});
+}
 void RequestClipboardPush() { Post(WM_CLIP_PUSH, 0, 0); }
 void FileReceived(const std::wstring& path) { Post(WM_FILE_RX, 0, (LPARAM) new std::wstring(path)); }
 void Notify(const std::wstring& title, const std::wstring& text) {

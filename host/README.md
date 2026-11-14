@@ -1,6 +1,6 @@
 # DeskLink Host (Windows)
 
-Native C++ (Win32 + Direct3D 11 + Media Foundation + WASAPI + WIC + CNG). One 705 KB `.exe`, no runtime to
+Native C++ (Win32 + Direct3D 11 + Media Foundation + WASAPI + WIC + CNG). One 721 KB `.exe`, no runtime to
 install.
 
 ## Pipeline
@@ -68,7 +68,7 @@ WASAPI loopback of the default output (48 kHz 16-bit stereo, converted by Window
 | `vdisplay.cpp` | the virtual screen (Parsec VDD) while no monitor is on: added, pinged, taken away |
 | `audio.cpp` | the PC's sound: WASAPI loopback of the default output, AAC by Media Foundation, quiet gate |
 | `screenshot.cpp` | screenshots: the shown picture at full size as a PNG (WIC), sent like a file |
-| `input.cpp`, `desktop.cpp` | `SendInput` injection (absolute mouse, relative mouse for game cameras, VK keys, Unicode text), input-desktop following |
+| `input.cpp`, `desktop.cpp` | `SendInput` injection (absolute mouse, relative mouse for game cameras, VK keys, Unicode text, a phone keyboard's paste as Ctrl+V once the UI thread has put it on the clipboard), input-desktop following |
 | `files.cpp` | phone→PC into `Downloads\DeskLink`, PC→phone via a file picker on the PC |
 | `ui.cpp`, `strings.cpp` | tray menu, "Shared with …" pill, pairing window, clipboard bridge (EN/ES) |
 | `service.cpp` | Windows service + SYSTEM agent in the console session, installer/uninstaller |
@@ -97,12 +97,17 @@ DeskLinkHostTest.exe --data %TEMP%\dl --test-virtual-screen          :: Parsec V
 :: (Windows' AAC decoder): the tone must come back, and nothing may follow a second of quiet; out.aac to listen
 DeskLinkHostTest.exe --data %TEMP%\dl --test-audio 3 out.aac
 DeskLinkHostTest.exe --data %TEMP%\dl --test-input                   :: injection checked by swallowing hooks
+DeskLinkHostTest.exe --data %TEMP%\dl --test-paste                   :: a keyboard paste: on the clipboard, then Ctrl+V
+:: in its place among other keys; typed with Shift+Enter without the clipboard (keys recorded, nothing injected). Runs
+:: only with text or nothing on the clipboard, and puts that back (text without its formatting)
 DeskLinkHostTest.exe --data %TEMP%\dl --test-home                    :: which addresses count as home, the router's (20 cases)
 DeskLinkHostTest.exe --data %TEMP%\dl --test-render-ui %TEMP%\png    :: pairing window PNGs
-DeskLinkHostTest.exe --data %TEMP%\dl --bind 127.0.0.1 --port 47910 --no-ui --auto-approve
-:: with HOST_LOG set to the test host's log, the phone's log line (CLIENT_LOG) must be in it
+DeskLinkHostTest.exe --data %TEMP%\dl --bind 127.0.0.1 --port 47910 --no-ui --auto-approve --no-inject
+:: with HOST_LOG set to the test host's log, the phone's log line (CLIENT_LOG) must be in it; with HOST_NO_INJECT=1
+:: (only for a host started with --no-inject, which logs keys instead of typing them) a PASTE is sent and its keys checked
 set HOST_LOG=%TEMP%\dl\host.log
-node tools\testclient.mjs 127.0.0.1 47910 %TEMP%\work                :: 21 end-to-end protocol checks (sound and a
+set HOST_NO_INJECT=1
+node tools\testclient.mjs 127.0.0.1 47910 %TEMP%\work                :: 23 end-to-end protocol checks (sound and a
                                                                      :: screenshot too, kept as shot.png in the work folder)
 ```
 

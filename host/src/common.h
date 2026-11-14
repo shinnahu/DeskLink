@@ -60,6 +60,8 @@ struct RuntimeOptions {
   bool testNoScreen = false;          // DESKLINK_TESTING: the monitors are left out, as if switched off
   int testDropVirtualAt = 0;          // DESKLINK_TESTING: --test-capture takes the virtual screen away (as its driver
                                       // might) this many seconds in
+  bool testPrivateClipboard = false;  // DESKLINK_TESTING: what DeskLink puts on the clipboard is marked private, so
+                                      // clipboard history, the cloud clipboard and a running DeskLink leave it alone
 };
 extern RuntimeOptions g_opt;
 

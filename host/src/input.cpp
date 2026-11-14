@@ -77,6 +77,7 @@ void InputInjector::Run() {
       case InputEvent::Wheel: DoWheel(ev.dy, ev.dx); break;
       case InputEvent::Key: DoKey(ev.vk, ev.down != 0); break;
       case InputEvent::Text: DoText(ev.text); break;
+      case InputEvent::Paste: DoPaste(ev); break;
       case InputEvent::ReleaseAll: DoReleaseAll(); break;
       case InputEvent::Action: DoAction(ev.action); break;
     }
@@ -92,10 +93,11 @@ void InputInjector::Send(INPUT* in, UINT n) {
 #ifdef DESKLINK_TESTING
   if (g_opt.testNoInject) {  // protocol tests: say what would have been injected, leave the desktop alone
     for (UINT i = 0; i < n; i++) {
-      if (in[i].type == INPUT_MOUSE)
+      if (testSent) testSent(in[i]);
+      else if (in[i].type == INPUT_MOUSE)
         Log("input(test): mouse flags=0x%04lx dx=%ld dy=%ld", in[i].mi.dwFlags, in[i].mi.dx, in[i].mi.dy);
       else if (in[i].type == INPUT_KEYBOARD)
-        Log("input(test): key vk=0x%02x flags=0x%04lx", in[i].ki.wVk, in[i].ki.dwFlags);
+        Log("input(test): key vk=0x%02x scan=0x%04x flags=0x%04lx", in[i].ki.wVk, in[i].ki.wScan, in[i].ki.dwFlags);
     }
     return;
   }
@@ -216,20 +218,32 @@ void InputInjector::DoKey(uint16_t vk, bool down) {
   Send(&in, 1);
 }
 
-void InputInjector::DoText(const std::wstring& s) {
+// Typed text. pasted: text the phone's keyboard pasted, where a line break is Shift+Enter: a new line in the chat boxes
+// in which Enter sends the message, and still a new line in editors.
+void InputInjector::DoText(const std::wstring& s, bool pasted) {
   std::vector<INPUT> v;
   v.reserve(s.size() * 2);
   auto vkPress = [&](uint16_t vk) {
     v.push_back(MakeKey(vk, true));
     v.push_back(MakeKey(vk, false));
   };
+  bool shiftHeld = keysDown_.count(VK_SHIFT) || keysDown_.count(VK_LSHIFT) || keysDown_.count(VK_RSHIFT);
+  auto newLine = [&] {
+    if (!pasted || shiftHeld) {
+      vkPress(VK_RETURN);
+      return;
+    }
+    v.push_back(MakeKey(VK_SHIFT, true));
+    vkPress(VK_RETURN);
+    v.push_back(MakeKey(VK_SHIFT, false));
+  };
   for (size_t i = 0; i < s.size(); i++) {
     wchar_t c = s[i];
     if (c == L'\r') {
       if (i + 1 < s.size() && s[i + 1] == L'\n') continue;
-      vkPress(VK_RETURN);
+      newLine();
     } else if (c == L'\n') {
-      vkPress(VK_RETURN);
+      newLine();
     } else if (c == L'\t') {
       vkPress(VK_TAB);
     } else if (c == L'\b') {
@@ -249,6 +263,27 @@ void InputInjector::DoText(const std::wstring& s) {
     UINT n = (UINT)std::min<size_t>(64, v.size() - off);
     Send(v.data() + off, n);
   }
+}
+
+// Text the phone's keyboard pasted. On the clipboard (the UI thread puts it there) it's pasted with Ctrl+V: all at
+// once and with its line breaks, as a paste on the PC would be. Otherwise it's typed, line breaks as Shift+Enter.
+void InputInjector::DoPaste(const InputEvent& ev) {
+  bool onClipboard = false;
+  if (ev.onClipboard.valid() && ev.onClipboard.wait_for(std::chrono::seconds(1)) == std::future_status::ready) {
+    try {
+      onClipboard = ev.onClipboard.get();
+    } catch (...) {  // the UI thread ended before it got to it
+    }
+  }
+  Log("input: a paste of %zu characters, %s", ev.text.size(), onClipboard ? "with Ctrl+V" : "typed");
+  if (!onClipboard) {
+    DoText(ev.text, true);
+    return;
+  }
+  bool ctrlHeld = keysDown_.count(VK_CONTROL) || keysDown_.count(VK_LCONTROL) || keysDown_.count(VK_RCONTROL);
+  INPUT in[4] = {MakeKey(VK_CONTROL, true), MakeKey('V', true), MakeKey('V', false), MakeKey(VK_CONTROL, false)};
+  if (ctrlHeld) Send(in + 1, 2);  // the phone holds Ctrl already: leave it held
+  else Send(in, 4);
 }
 
 void InputInjector::DoReleaseAll() {

@@ -1,4 +1,5 @@
 #pragma once
+#include <future>
 #include <set>
 
 #include "common.h"
@@ -8,13 +9,16 @@
 constexpr ULONG_PTR kInjectTag = 0x0D35C11Bu;
 
 struct InputEvent {
-  enum Type : uint8_t { Move, Button, Wheel, Key, Text, ReleaseAll, Action, RelMove } type = Move;
+  enum Type : uint8_t { Move, Button, Wheel, Key, Text, ReleaseAll, Action, RelMove, Paste } type = Move;
   int32_t x = 0, y = 0;  // Move: monitor-relative pixels; RelMove: mouse counts (dx, dy)
   uint8_t button = 0, down = 0;
   int16_t dy = 0, dx = 0;
   uint16_t vk = 0;
   uint8_t action = 0;
   std::wstring text;
+  // Paste: true once the text is on the clipboard, which is then pasted with Ctrl+V; not valid, false, or not ready
+  // within a second: the text is typed instead
+  std::shared_future<bool> onClipboard;
 };
 
 // Injects mouse/keyboard input on a dedicated thread that follows the input desktop.
@@ -30,6 +34,10 @@ class InputInjector {
   bool IsRecentClientPos(int x, int y);  // monitor-relative
   // Optional callback for ACTION messages that need host-level handling (e.g. notices)
   std::function<void(const std::string&)> notice;
+#ifdef DESKLINK_TESTING
+  // With --no-inject: given each event that would have been injected, instead of its log line (self-tests)
+  std::function<void(const INPUT&)> testSent;
+#endif
 
   // Pure helper used by the self-test: normalized absolute coordinates for a virtual-desktop pixel.
   static void ToAbsolute(int sx, int sy, LONG& dx, LONG& dy);
@@ -41,7 +49,8 @@ class InputInjector {
   void DoButton(int b, bool down);
   void DoWheel(int dy, int dx);
   void DoKey(uint16_t vk, bool down);
-  void DoText(const std::wstring& s);
+  void DoText(const std::wstring& s, bool pasted = false);
+  void DoPaste(const InputEvent& ev);
   void DoReleaseAll();
   void DoAction(uint8_t a);
   void Send(INPUT* in, UINT n);

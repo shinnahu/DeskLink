@@ -194,8 +194,12 @@ int RunHomeSelfTest() {
 // ---------------------------------------------------------------- input self-test
 // Injects tagged events and verifies them with low-level hooks that SWALLOW only our tagged
 // events, so nothing reaches the real desktop (the user's own mouse/keyboard pass through).
+#include <future>
+
+#include "app.h"
 #include "desktop.h"
 #include "input.h"
+#include "ui.h"
 
 namespace {
 struct Rec {
@@ -338,6 +342,181 @@ int RunInputSelfTest() {
   Log("inputtest: %zu events captured, %d failure(s)", g_recs.size(), fails);
   return fails == 0 ? 0 : 1;
 }
+
+#ifdef DESKLINK_TESTING
+// ---------------------------------------------------------------- paste
+// What the phone's keyboard pastes (msg::PASTE). With the clipboard shared, the UI thread puts the text on the
+// clipboard and the input thread, waiting for that, presses Ctrl+V, in its place among the keys around it. Without the
+// clipboard it's typed, each line break as Shift+Enter. Nothing is injected: the keys the injector would send are
+// recorded (--no-inject's way). The clipboard's text is put back at the end; meanwhile the test's clipboard is marked
+// private, so clipboard history, the cloud clipboard and a running DeskLink leave it alone.
+namespace {
+std::mutex g_sentMu;
+std::vector<INPUT> g_sent;
+
+// What the clipboard holds: text (read into out), nothing, or something else (or it couldn't be opened).
+enum class Clip { Text, Empty, Other };
+Clip ReadClipText(std::wstring& out) {
+  for (int i = 0; i < 20; i++, Sleep(10)) {
+    if (!OpenClipboard(nullptr)) continue;
+    Clip c = CountClipboardFormats() == 0 ? Clip::Empty : Clip::Other;
+    if (HANDLE h = GetClipboardData(CF_UNICODETEXT)) {
+      if (auto* p = (const wchar_t*)GlobalLock(h)) {
+        out.assign(p, wcsnlen(p, GlobalSize(h) / sizeof(wchar_t)));
+        GlobalUnlock(h);
+        c = Clip::Text;
+      }
+    }
+    CloseClipboard();
+    return c;
+  }
+  return Clip::Other;
+}
+
+// The keys the injector would have sent since the last call, as "CTRL down", "V up" or "'x' down" (typed text).
+std::vector<std::string> KeysSent() {
+  std::vector<std::string> out;
+  std::lock_guard<std::mutex> lk(g_sentMu);
+  for (auto& in : g_sent) {
+    if (in.type != INPUT_KEYBOARD) continue;
+    std::string k;
+    if (in.ki.dwFlags & KEYEVENTF_UNICODE) {
+      WORD c = in.ki.wScan;
+      k = c < 0x80 ? "'" + std::string(1, (char)c) + "'" : "U+" + std::to_string(c);
+    } else {
+      switch (in.ki.wVk) {
+        case VK_CONTROL: k = "CTRL"; break;
+        case VK_SHIFT: k = "SHIFT"; break;
+        case VK_RETURN: k = "RETURN"; break;
+        case VK_BACK: k = "BACK"; break;
+        case 'V': k = "V"; break;
+        default: k = "vk" + std::to_string(in.ki.wVk);
+      }
+    }
+    out.push_back(k + ((in.ki.dwFlags & KEYEVENTF_KEYUP) ? " up" : " down"));
+  }
+  g_sent.clear();
+  return out;
+}
+
+std::shared_future<bool> PutOnClipboard(const std::wstring& text) {
+  auto put = std::make_shared<std::promise<bool>>();
+  auto f = put->get_future().share();
+  ui::SetClipboardText(W2U(text), [put](bool ok) { put->set_value(ok); });
+  return f;
+}
+}  // namespace
+
+int RunPasteSelfTest() {
+  g_opt.testPrivateClipboard = true;
+  g_opt.testNoInject = true;
+  // The test puts its own text on the clipboard. Only text (without its formatting) or nothing can be put back
+  // afterwards, so with anything else there (a picture, files) it doesn't run.
+  std::wstring saved;
+  Clip was = ReadClipText(saved);
+  if (was == Clip::Other) {
+    Log("pastetest: the clipboard holds something other than text, which couldn't be put back: not run");
+    return 2;
+  }
+  static App app;  // what the UI's window looks at (no session)
+  if (!g_app) g_app = &app;
+  HANDLE uiReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  bool uiOk = false;
+  std::thread uiThread([&] {
+    uiOk = ui::Init(false);
+    SetEvent(uiReady);
+    if (uiOk) ui::Run();
+  });
+  WaitForSingleObject(uiReady, 5000);
+  CloseHandle(uiReady);
+  int fails = 0;
+  if (!uiOk) {
+    Log("pastetest: no UI thread");
+    fails++;
+  }
+
+  InputInjector inj;
+  inj.testSent = [](const INPUT& in) {
+    std::lock_guard<std::mutex> lk(g_sentMu);
+    g_sent.push_back(in);
+  };
+  inj.Start();
+  auto key = [&](uint16_t vk) {
+    for (uint8_t down : {1, 0}) {
+      InputEvent e;
+      e.type = InputEvent::Key;
+      e.vk = vk;
+      e.down = down;
+      inj.Post(std::move(e));
+    }
+  };
+  auto type = [&](const wchar_t* t) {
+    InputEvent e;
+    e.type = InputEvent::Text;
+    e.text = t;
+    inj.Post(std::move(e));
+  };
+  auto check = [&](const char* what, const std::vector<std::string>& want) {
+    std::vector<std::string> got = KeysSent();
+    bool ok = got == want;
+    std::string g;
+    for (auto& k : got) g += (g.empty() ? "" : ", ") + k;
+    Log("pastetest: %s: %s %s", what, g.c_str(), ok ? "OK" : "MISMATCH");
+    if (!ok) fails++;
+  };
+
+  // 1. the clipboard shared: Backspace, the paste, "x" typed. Ctrl+V comes between them, once the text is there.
+  const std::wstring text = L"DeskLink paste test ñ\nsecond line";
+  key(VK_BACK);
+  InputEvent p;
+  p.type = InputEvent::Paste;
+  p.text = text;
+  p.onClipboard = PutOnClipboard(text);
+  inj.Post(std::move(p));
+  type(L"x");
+  Sleep(600);
+  std::wstring now;
+  bool onClip = ReadClipText(now) == Clip::Text && now == L"DeskLink paste test ñ\r\nsecond line";
+  Log("pastetest: the clipboard holds the pasted text, with Windows line breaks: %s", onClip ? "OK" : "MISMATCH");
+  if (!onClip) fails++;
+  check("pasted with the clipboard",
+        {"BACK down", "BACK up", "CTRL down", "V down", "V up", "CTRL up", "'x' down", "'x' up"});
+
+  // 2. without the clipboard (not shared): typed, the line break as Shift+Enter
+  InputEvent t;
+  t.type = InputEvent::Paste;
+  t.text = L"a\nb";
+  inj.Post(std::move(t));
+  Sleep(400);
+  check("typed", {"'a' down", "'a' up", "SHIFT down", "RETURN down", "RETURN up", "SHIFT up", "'b' down", "'b' up"});
+
+  // 3. typed text as before: its line break is Enter (the phone's keyboard pressed it)
+  type(L"c\n");
+  Sleep(400);
+  check("typed text", {"'c' down", "'c' up", "RETURN down", "RETURN up"});
+
+  inj.Stop();
+  if (was == Clip::Text) {
+    auto back = PutOnClipboard(saved);
+    bool restored = back.wait_for(std::chrono::seconds(2)) == std::future_status::ready && back.get();
+    Log("pastetest: the clipboard's own text put back: %s", restored ? "yes" : "NO");
+    if (!restored) fails++;
+  } else {  // it was empty
+    bool emptied = false;
+    for (int i = 0; i < 20 && !emptied; i++, Sleep(10)) {
+      if (!OpenClipboard(nullptr)) continue;
+      emptied = EmptyClipboard() != 0;
+      CloseClipboard();
+    }
+    Log("pastetest: the clipboard emptied again, as it was: %s", emptied ? "yes" : "NO");
+    if (!emptied) fails++;
+  }
+  ui::Quit();
+  uiThread.join();
+  Log("pastetest: %d failure(s)", fails);
+  return fails == 0 ? 0 : 1;
+}
+#endif  // DESKLINK_TESTING
 
 // ---------------------------------------------------------------- virtual screen
 // Needs Parsec's virtual display driver. A virtual screen is put in beside the monitor and the pings keep it; taken
