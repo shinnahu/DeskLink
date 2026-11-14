@@ -223,6 +223,26 @@ async function main() {
       `${pw}x${ph} PNG (screen ${fmt && fmt.dw}x${fmt && fmt.dh}), ${Math.round(got / 1024)} KB`);
   }
 
+  // 3d. CLIENT_LOG (host 2.9): a line for the PC's log; the session goes on as before. With HOST_LOG set to the test
+  // host's log file (its --data folder's host.log), the line must be in it.
+  {
+    const marker = `decoder check ${crypto.randomBytes(4).toString('hex')} ñ\ttab`;
+    send(c, 0x53, Buffer.from(marker, 'utf8'));
+    send(c, 0x53, Buffer.alloc(0)); // an empty one is left out
+    send(c, 0x50, u64(Date.now()));
+    let pong = false;
+    try { await recvType(c, 0x51, 3000); pong = true; } catch { /* no answer */ }
+    const logPath = process.env.HOST_LOG;
+    let logged = null;
+    for (let i = 0; logPath && i < 30 && !logged; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const text = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
+      logged = text.split(/\r?\n/).find((l) => l.includes('phone: ' + marker.replace('\t', ' '))) || null;
+    }
+    ok(pong && (!logPath || logged), 'CLIENT_LOG: the session goes on' +
+      (!logPath ? ' (HOST_LOG not set: the log line is not checked)' : logged ? `; logged: ${logged.slice(13)}` : '; NOT in the log'));
+  }
+
   // 4. upload a 1.5 MB file (phone -> PC)
   const blob = crypto.randomBytes(1536 * 1024 + 123);
   send(c, 0x40, u32(1), u64(blob.length), str('report ñ.bin'), str('application/octet-stream'));

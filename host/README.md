@@ -1,6 +1,6 @@
 # DeskLink Host (Windows)
 
-Native C++ (Win32 + Direct3D 11 + Media Foundation + WASAPI + WIC + CNG). One 704 KB `.exe`, no runtime to
+Native C++ (Win32 + Direct3D 11 + Media Foundation + WASAPI + WIC + CNG). One 705 KB `.exe`, no runtime to
 install.
 
 ## Pipeline
@@ -62,7 +62,7 @@ WASAPI loopback of the default output (48 kHz 16-bit stereo, converted by Window
 | `main.cpp` | modes: agent (default), `--install`, `--uninstall`, `--service`, self-tests |
 | `server.cpp` | TCP listener, handshake (+ the knock required from the internet), AUTH / STATUS_QUERY / pairing, UDP LAN discovery |
 | `remote.cpp` | mobile data: UPnP on the home router (port forward, IPv6 pinhole), renewed every 30 min; home-vs-internet peers |
-| `session.cpp` | one phone connection: reader + writer threads (video before file data), ping, dispatch |
+| `session.cpp` | one phone connection: reader + writer threads (video before file data), ping, dispatch; the phone's own log lines (`phone:`, what its video decoder did) |
 | `channel.cpp`, `crypto.cpp` | ECDH P-256 + ECDSA host identity + HKDF + AES-256-GCM (Windows CNG) |
 | `capture.cpp`, `encoder.cpp`, `h264.cpp` | capture, colour conversion, H.264, flow/rate control, cursor |
 | `vdisplay.cpp` | the virtual screen (Parsec VDD) while no monitor is on: added, pinged, taken away |
@@ -100,7 +100,9 @@ DeskLinkHostTest.exe --data %TEMP%\dl --test-input                   :: injectio
 DeskLinkHostTest.exe --data %TEMP%\dl --test-home                    :: which addresses count as home, the router's (20 cases)
 DeskLinkHostTest.exe --data %TEMP%\dl --test-render-ui %TEMP%\png    :: pairing window PNGs
 DeskLinkHostTest.exe --data %TEMP%\dl --bind 127.0.0.1 --port 47910 --no-ui --auto-approve
-node tools\testclient.mjs 127.0.0.1 47910 %TEMP%\work                :: 20 end-to-end protocol checks (sound and a
+:: with HOST_LOG set to the test host's log, the phone's log line (CLIENT_LOG) must be in it
+set HOST_LOG=%TEMP%\dl\host.log
+node tools\testclient.mjs 127.0.0.1 47910 %TEMP%\work                :: 21 end-to-end protocol checks (sound and a
                                                                      :: screenshot too, kept as shot.png in the work folder)
 ```
 

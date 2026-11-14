@@ -52,6 +52,8 @@ public final class Protocol {
     public static final int PING = 0x50;
     public static final int PONG = 0x51;
     public static final int NOTICE = 0x52;
+    /** Client → host: a line for the PC's log (what the phone's video decoder did). Hosts before 2.9 ignore it. */
+    public static final int CLIENT_LOG = 0x53;
     public static final int BYE = 0x5F;
 
     // ---- host -> client

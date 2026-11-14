@@ -651,6 +651,13 @@ public final class HostConnection implements Closeable {
 
     public void requestKeyframe() { enqueue(ByteWriter.msg(Protocol.KEYFRAME_REQUEST), false); }
 
+    /** A line for the PC's log, in English (what the phone's video decoder did); kept short. */
+    public void clientLog(String line) {
+        if (line == null || line.isEmpty()) return;
+        String s = line.length() > 300 ? line.substring(0, 300) + "…" : line;
+        enqueue(new ByteWriter(1 + s.length() * 3).u8(Protocol.CLIENT_LOG).utf8Tail(s).toByteArray(), false);
+    }
+
     public void streamConfig(int maxWidth, int maxHeight, int maxFps, int bitrateKbps) {
         enqueue(new ByteWriter(10).u8(Protocol.STREAM_CONFIG).u16(maxWidth).u16(maxHeight).u8(maxFps).u32(bitrateKbps).toByteArray(), false);
     }

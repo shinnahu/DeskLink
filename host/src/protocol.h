@@ -47,6 +47,7 @@ enum : uint8_t {
   PING = 0x50,
   PONG = 0x51,
   NOTICE = 0x52,
+  CLIENT_LOG = 0x53,  // phone -> PC: a line for this log (what the phone's video decoder did), English UTF-8
   BYE = 0x5F,
 
   AUTH_RESULT = 0x80,

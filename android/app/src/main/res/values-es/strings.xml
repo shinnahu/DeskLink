@@ -67,6 +67,7 @@
 
     <string name="conn_connecting">Conectando con %1$s…</string>
     <string name="conn_waiting_video">Esperando la pantalla…</string>
+    <string name="conn_decoder_retry">El decodificador de video del teléfono no dio imagen. Probando otro…</string>
     <string name="conn_lost">Se perdió la conexión</string>
     <string name="conn_reconnecting">Reconectando… (intento %1$d)</string>
     <string name="conn_reconnecting_simple">Reconectando…</string>
@@ -244,6 +245,7 @@
     <string name="set_sound_play">Escuchar el sonido de la PC</string>
     <string name="set_sound_sum">Lo que suena en los parlantes de la PC sale por el teléfono; lo ajustás con las teclas de volumen. Necesita DeskLink 2.7 en la PC.</string>
     <string name="note_no_sound">Sin sonido: la PC no tiene parlantes ni auriculares activos ahora</string>
+    <string name="note_software_decoder">El decodificador de video del teléfono dejó de responder, así que la imagen viene del decodificador por software, más lento. Cerrar DeskLink desde Recientes vuelve a probar el rápido.</string>
     <string name="set_clipboard">Portapapeles</string>
     <string name="set_clipboard_sum">Copiá de un lado y pegá del otro.</string>
     <string name="set_security">Seguridad</string>

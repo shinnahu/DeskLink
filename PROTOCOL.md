@@ -272,6 +272,7 @@ Sound and video always have priority over file data on the wire.
 | 0x50 | PING | ↔ | `u64 t` |
 | 0x51 | PONG | ↔ | `u64 t` (echo) |
 | 0x52 | NOTICE | H→C | `u8 level(0 info 1 warn 2 error) str text` |
+| 0x53 | CLIENT_LOG | C→H | `tail utf8` one line for the host's log, in English: what the client's video decoder did (which one started, which failed or gave no picture). Host 2.9+ writes it as `session <name>: phone: <line>` (at most 400 bytes, 30 lines a minute); older hosts ignore it |
 | 0x5F | BYE | ↔ | `u8 reason str message` — 0 normal, 1 stopped on the PC, 2 replaced by a newer connection, 3 host exiting, 4 protocol/auth error, 5 timeout |
 
 Liveness

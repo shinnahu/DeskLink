@@ -4,8 +4,8 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 
 | part | file | size |
 |---|---|---|
-| Windows host (your PC) | `dist/DeskLinkHost.exe` | 704 KB (version 2.8), no install required to try |
-| Android app (your phone) | `dist/DeskLink.apk` | 192 KB (version 2.11) |
+| Windows host (your PC) | `dist/DeskLinkHost.exe` | 705 KB (version 2.9), no install required to try |
+| Android app (your phone) | `dist/DeskLink.apk` | 197 KB (version 2.12) |
 
 On GitHub, both files are attached to each release (*Releases*, on the right of the repository page) rather than kept
 in the code.
@@ -274,6 +274,13 @@ Then:
 It needs DeskLink 2.6 on the PC. The driver is Parsec's own (closed source), so DeskLink doesn't include it. A dummy
 plug (a DisplayPort or HDMI "headless display emulator") in a free port of the graphics card also works, with no driver.
 
+**If the picture doesn't come** (*Waiting for the screen…* while the PC sends it): the phone's video decoder can take
+the picture and show nothing. Since 2.12, after 4 seconds of that the phone tries its next decoder, its software one
+last, and the waiting screen says *The phone's video decoder gave no picture. Trying another one…*. On the software
+decoder (slower, more battery) a note says so; closing DeskLink from Recent apps tries the faster one again. *Show
+stats* names the decoder in use, also over the waiting screen, and with DeskLink 2.9 on the PC every decoder change is
+written to the PC's log (lines with `phone:`).
+
 ## 4. Away from home (mobile data)
 
 DeskLink connects the phone straight to the PC, with no server in between. At home that's Wi‑Fi. Away from home the PC
@@ -462,6 +469,21 @@ missing: the copy took under a millisecond, the PNG 31 ms. Every other protocol 
 phone, unit tests check where it goes (`Pictures/DeskLink`, as a PNG, through Android's media store) and that other
 files still go to `Download/DeskLink`, and the README's pictures, redrawn by the app's code, show the camera. Not yet
 tried on the phone.
+Version 2.9 (PC) and 2.12 (phone) end a wait for the screen that didn't end. On 2026-11-14 the phone stayed on *Waiting
+for the screen…* from 10:51 to 11:08: through five reconnects on the virtual screen, and after the monitor was switched
+back on. The PC's log showed its capture running and the phone acknowledging the frames as they came (the bitrate rose
+from 8 to 20 Mbps, which takes acknowledged frames). The phone's stats, then drawn under the waiting screen, showed 17.8
+Mbps coming in, 0 frames a second shown, and its hardware decoder (OMX.qcom.video.decoder.avc) running. The app had no
+way out: it waited for a picture from that decoder for as long as frames came. The next session, at 11:10, showed the
+picture at 40 fps with the same decoder. The phone now gives up on a decoder that shows no picture 4 s after a keyframe
+went in, that is stuck 4 s in one call, or when none would start for 4 s, and tries the next one: every H.264 decoder
+the phone lists, hardware first, its software decoder last. The one given up on is tried last for 10 minutes. A decoder
+now lets go of the picture's surface before the surface goes, and the next one waits for that (1.5 s at most, then it
+draws on a new surface). What the decoders do goes to the PC's log as `phone:` lines (a new message, CLIENT_LOG; older
+PCs ignore it), and the stats are drawn over the waiting screen. Checked with unit tests (when a decoder is given up on;
+which decoder comes next, with OMX names as aliases of the Codec2 ones) and, over 127.0.0.1, a line from the test
+client written to the PC's log; every protocol check passes (21 now). Switching decoders hasn't been seen on a phone:
+what happened on 11-14 can't be made to happen on purpose.
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del);
@@ -472,7 +494,9 @@ Not yet verified:
 * the PC's sound on the phone (2.7 / 2.10): how far behind the picture it is, over mobile data, and a monitor with the
   only speakers switched off;
 * screenshots on the phone (2.8 / 2.11): the camera, the picture in the gallery, all screens, a monitor turned to
-  portrait, and the lock screen with the installed service.
+  portrait, and the lock screen with the installed service;
+* 2.12 on the phone: the picture as before, the stats over the waiting screen, the decoder's `phone:` lines in the PC's
+  log (2.9), and a decoder given up on (seen once, on 2026-11-14).
 
 ## Build from source
 

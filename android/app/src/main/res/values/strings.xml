@@ -72,6 +72,7 @@
     <!-- Session -->
     <string name="conn_connecting">Connecting to %1$s…</string>
     <string name="conn_waiting_video">Waiting for the screen…</string>
+    <string name="conn_decoder_retry">The phone\'s video decoder gave no picture. Trying another one…</string>
     <string name="conn_lost">Connection lost</string>
     <string name="conn_reconnecting">Reconnecting… (attempt %1$d)</string>
     <string name="conn_reconnecting_simple">Reconnecting…</string>
@@ -266,6 +267,7 @@
     <string name="set_sound_play">Play the PC\'s sound</string>
     <string name="set_sound_sum">What the PC\'s speakers play comes out of the phone; the volume keys set it. Needs DeskLink 2.7 on the PC.</string>
     <string name="note_no_sound">No sound: the PC has no speakers or headphones on right now</string>
+    <string name="note_software_decoder">The phone\'s video decoder stopped answering, so the picture comes from its slower software decoder. Closing DeskLink from Recent apps tries the fast one again.</string>
     <string name="set_clipboard">Clipboard</string>
     <string name="set_clipboard_sum">Copy on one side, paste on the other.</string>
     <string name="set_security">Security</string>

@@ -62,6 +62,8 @@ class Session : public StreamSink, public std::enable_shared_from_this<Session> 
   std::unique_ptr<Streamer> streamer_;
   std::unique_ptr<AudioStreamer> audio_;
   bool audioWanted_ = false, streamPaused_ = false;  // (reader thread only)
+  uint64_t phoneLogMinute_ = 0;  // CLIENT_LOG lines written this minute, at most kPhoneLogPerMinute (reader thread)
+  int phoneLogLines_ = 0;
   std::unique_ptr<FileReceiver> files_;
   std::atomic<bool> clipboardSync_{true};
   std::string lastClipSent_;
