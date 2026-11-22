@@ -72,11 +72,6 @@ final class Prefs {
 
     void setShowBar(boolean v) { sp.edit().putBoolean("showBar", v).apply(); }
 
-    /** The mobile-data flags last shown for a PC (Protocol.REMOTE_*), so the note appears again only when they change. */
-    int remoteShown(String hostId) { return sp.getInt("remoteShown_" + hostId, -1); }
-
-    void setRemoteShown(String hostId, int flags) { sp.edit().putInt("remoteShown_" + hostId, flags).apply(); }
-
     /** Gaming mode: what each control does, written on it: always, for 5 s when Gaming mode starts, or never. */
     static final int LABELS_ALWAYS = 0, LABELS_ON_START = 1, LABELS_OFF = 2;
 

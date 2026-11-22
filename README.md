@@ -5,10 +5,10 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 | part | file | size |
 |---|---|---|
 | Windows host (your PC) | `dist/DeskLinkHost.exe` | 723 KB (version 2.11), no install required to try |
-| Android app (your phone) | `dist/DeskLink.apk` | 198 KB (version 2.14) |
+| Android app (your phone) | `dist/DeskLink.apk` | 195 KB (version 2.15) |
 
-On GitHub, both files are attached to each release (*Releases*, on the right of the repository page) rather than kept
-in the code.
+On GitHub, both files are attached to the latest release (*Releases*, on the right of the repository page) rather than
+kept in the code; older releases are removed.
 
 ## Preview
 
@@ -109,7 +109,7 @@ it to pick one, including a Gaming mode profile. *Direct touch*: tap where you w
 default (Settings → *Sound* → *Play the PC's sound*) and needs DeskLink 2.7 on the PC. It goes with the picture: it
 stops while DeskLink is in the background, and after a second of quiet nothing is sent, so a silent PC costs no data
 (about 1 MB a minute while sound plays). If the PC's only speakers are its monitor's and the monitor is off, the PC has
-no sound output: the phone says so, and the sound comes once there is one (headphones plugged in, say).
+no sound output, and the sound comes once there is one (headphones plugged in, say).
 
 **Bottom-right buttons** (always there, never hidden with the toolbar):
 
@@ -287,10 +287,12 @@ plug (a DisplayPort or HDMI "headless display emulator") in a free port of the g
 
 **If the picture doesn't come** (*Waiting for the screen…* while the PC sends it): the phone's video decoder can take
 the picture and show nothing. Since 2.12, after 4 seconds of that the phone tries its next decoder, its software one
-last, and the waiting screen says *The phone's video decoder gave no picture. Trying another one…*. On the software
-decoder (slower, more battery) a note says so; closing DeskLink from Recent apps tries the faster one again. *Show
-stats* names the decoder in use, also over the waiting screen, and with DeskLink 2.9 on the PC every decoder change is
-written to the PC's log (lines with `phone:`).
+last (slower, more battery). Since 2.15 it tries the faster one again by itself, with no message: a decoder that failed
+(no picture, or it wouldn't start) is tried last for 2 minutes, then twice as long after each further failure in a row,
+up to an hour; after that the phone switches back to it, also in the middle of a session, and gives it 2 seconds to
+show a picture. Once a decoder has shown pictures for a minute, its failures are forgotten. *Show stats* names the
+decoder in use, also over the waiting screen, and with DeskLink 2.9 on the PC every decoder change is written to the
+PC's log (lines with `phone:`).
 
 ## 4. Away from home (mobile data)
 
@@ -303,9 +305,9 @@ opens the way in by itself, with nothing else to install:
 * **The phone**: after updating, connect once at home. The PC then tells the phone its internet address, and from then
   on the phone tries it whenever Wi‑Fi can't reach the PC.
 
-The PC's tray menu says what worked, for example *Mobile data: ready (181.x.x.x)*. The phone says the same once when it
-connects, and again if it changes. If the phone can't reach the PC over mobile data, its *Can't reach* screen says the
-likely reason and what to do, from what the PC last reported. It can't work when:
+The PC's tray menu says what worked, for example *Mobile data: ready (181.x.x.x)*. If the phone can't reach the PC over
+mobile data, its *Can't reach* screen says the likely reason and what to do, from what the PC last reported. It can't
+work when:
 
 * **UPnP is off on the router**: turn it on in the router's settings, or forward TCP 47810 to the PC yourself.
 * **Your internet company shares one address between many homes (CGNAT)**: then only IPv6 can work, and only if the
@@ -516,6 +518,13 @@ replace the first on the clipboard. Checked with unit tests (12 new), the app's 
 a stand-in chat box in Electron (in a window station of its own; input played as window messages, not injected), a
 classic Windows menu, and over 127.0.0.1 (24 checks, all passing). Later that day, with both installed, a paste of
 several lines from the phone was reported to paste fine; how it was sent isn't known either.
+Version 2.15 (phone) drops the messages that only explained or suggested something: the line about mobile data after
+connecting (*Mobile data: ready*, *Away from home this PC can only work over IPv6*…), the tip under the list of PCs,
+*No sound* when the PC has no sound output, the note on the software decoder (it said to close DeskLink from Recent
+apps) and the waiting screen's *Trying another one…*. Sound failures go to the PC's log instead, and the *Can't reach*
+screen no longer mentions IPv6. Instead of asking for the app to be closed, the phone tries a faster decoder again by
+itself (see *If the picture doesn't come*). Checked with unit tests (3 new: how long a decoder rests, when the session
+switches back, the 2 s it then has). Not yet tried on the phone.
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del);
@@ -533,6 +542,8 @@ Not yet verified:
   older PC.
 * 2.14 / PC 2.11: a paste of several lines from Samsung's keyboard into a real chat, with and without a right click
   first; closing a menu with the installed service, and menus Windows doesn't report (Windows 11's File Explorer, say).
+* 2.15 on the phone: going back to the faster decoder by itself, in the middle of a session and when coming back to
+  the app.
 
 ## Build from source
 

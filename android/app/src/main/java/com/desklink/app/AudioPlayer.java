@@ -40,7 +40,7 @@ final class AudioPlayer {
     private final AtomicLong got = new AtomicLong(), decoded = new AtomicLong();
     private volatile String what = "";
     private volatile int waitingMs = -1; // -1: not playing
-    private volatile String problem;     // a failure for the screen to say once (takeProblem)
+    private volatile String problem;     // a failure to report once (takeProblem): it goes to the PC's log
 
     /** A new AUDIO_FORMAT (network thread): starts playing it, or starts over with it. */
     void start(Messages.AudioFormat f) {
@@ -81,7 +81,7 @@ final class AudioPlayer {
                 w < 0 ? "not playing" : w + " ms waiting");
     }
 
-    /** A failure to say on the screen, once (main thread). */
+    /** A failure to report, once, for the PC's log (main thread). */
     String takeProblem() {
         String p = problem;
         problem = null;

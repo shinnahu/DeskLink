@@ -29,15 +29,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Frames are queued from the network thread; every decoded frame is rendered immediately.
  *
  * The phone's H.264 decoders are tried in order: hardware ones first (one that says it does low latency before the
- * others), then the software one. One the session gave up on ({@link DecoderWatch}: it gave no picture) goes to the
- * back of the line for {@link #FORGET_MS}. A hardware decoder that got stuck stays stuck until the app is closed, and
- * the software one doesn't need the video hardware.
+ * others), then the software one, which doesn't need the video hardware. One that failed (the session gave up on it,
+ * {@link DecoderWatch}: it gave no picture; or it wouldn't start) goes to the back of the line for {@link #FORGET_MS},
+ * twice as long each further time in a row, up to {@link #REST_MAX_MS}. Then it's tried again, also in the middle of a
+ * session ({@link #better}), with {@link #RETRY_GIVE_UP_NS} to show a picture. Once it has shown pictures for
+ * {@link #CLEARED_AFTER_NS} it's as if it had never failed.
  */
 final class VideoDecoder {
     private static final String TAG = "DeskLinkDecoder";
     private static final String MIME = "video/avc";
-    /** A decoder that gave no picture is tried last for this long. */
-    static final long FORGET_MS = 10 * 60_000L;
+    /** A decoder that failed is tried last for this long, twice as long each further time in a row. */
+    static final long FORGET_MS = 2 * 60_000L;
+    static final long REST_MAX_MS = 60 * 60_000L;
+    /** How long a decoder that failed before has to show a picture after a keyframe (the first time: 4 s). */
+    static final long RETRY_GIVE_UP_NS = 2_000_000_000L;
+    /** Showing pictures this long clears a decoder's failures. */
+    static final long CLEARED_AFTER_NS = 60_000_000_000L;
 
     interface Callback {
         void onFirstFrame();
@@ -88,6 +95,8 @@ final class VideoDecoder {
     private volatile String codecName = "";
     private String lastStarted = "", lastFailure = ""; // said once until they change
     private int errorsInARow;
+    private long picturesSinceNs;  // when the codec running now showed its first picture (0: none yet)
+    private boolean cleared;       // ...and it has shown them long enough to clear its failures
 
     VideoDecoder(Surface surface, Callback cb) {
         this.surface = surface;
@@ -105,7 +114,7 @@ final class VideoDecoder {
     /** Why this decoder should be given up on now, or null while it's fine (UI thread). */
     DecoderWatch.Trouble trouble() {
         if (running && exited) return new DecoderWatch.Trouble("its thread ended", codecName, false);
-        return watch.trouble(System.nanoTime());
+        return watch.trouble(System.nanoTime(), failedBefore(codecName) ? RETRY_GIVE_UP_NS : DecoderWatch.GIVE_UP_NS);
     }
 
     void start() {
@@ -281,6 +290,8 @@ final class VideoDecoder {
                     watch.leave();
                     codec = c;
                     codecName = made;
+                    picturesSinceNs = 0;
+                    cleared = false;
                     cfgWidth = w;
                     cfgHeight = h;
                     pendingOutputs = 0;
@@ -308,6 +319,7 @@ final class VideoDecoder {
                 }
             }
             if (!running) return;
+            gaveNothing(name); // it wouldn't start: tried last for a while too, so it isn't switched back to right away
             if (failed.length() > 0) failed.append("; ");
             failed.append(label).append(": ").append(last != null ? brief(last) : "?");
         }
@@ -377,6 +389,15 @@ final class VideoDecoder {
                 if (render) {
                     watch.pictureOut();
                     errorsInARow = 0;
+                    if (!cleared) {
+                        long now = System.nanoTime();
+                        if (picturesSinceNs == 0) {
+                            picturesSinceNs = now;
+                        } else if (now - picturesSinceNs >= CLEARED_AFTER_NS) {
+                            cleared = true;
+                            gavePictures(codecName);
+                        }
+                    }
                 }
                 if (!firstRendered) {
                     firstRendered = true;
@@ -452,6 +473,7 @@ final class VideoDecoder {
     private static List<Candidate> listed;  // every H.264 decoder the phone lists, aliases too
     private static List<Candidate> ranked;  // best first, each codec once
     private static final Map<String, Long> gaveNothing = new HashMap<>(); // canonical name -> when (elapsedRealtime)
+    private static final Map<String, Integer> timesInARow = new HashMap<>(); // canonical name -> failures in a row
 
     private static synchronized List<Candidate> candidates() {
         if (ranked == null) {
@@ -509,31 +531,89 @@ final class VideoDecoder {
         return out;
     }
 
-    /** The decoders to try now, by name: best first, then those that gave no picture lately, the earliest such first. */
+    /** The decoders to try now, by name: best first, then those that failed lately, the earliest such first. */
     static synchronized List<String> order() {
-        return order(candidates(), gaveNothing, SystemClock.elapsedRealtime());
+        return order(candidates(), gaveNothing, timesInARow, SystemClock.elapsedRealtime());
     }
 
     static List<String> order(List<Candidate> ranked, Map<String, Long> gaveNothing, long nowMs) {
+        return order(ranked, gaveNothing, Collections.<String, Integer>emptyMap(), nowMs);
+    }
+
+    static List<String> order(List<Candidate> ranked, Map<String, Long> gaveNothing, Map<String, Integer> times, long nowMs) {
         List<String> out = new ArrayList<>();
         List<Candidate> later = new ArrayList<>();
         for (Candidate c : ranked) {
-            Long t = gaveNothing.get(c.canonical);
-            if (t == null || nowMs - t >= FORGET_MS) out.add(c.name);
-            else later.add(c);
+            if (resting(c.canonical, gaveNothing, times, nowMs)) later.add(c);
+            else out.add(c.name);
         }
         later.sort((a, b) -> Long.compare(gaveNothing.get(a.canonical), gaveNothing.get(b.canonical)));
         for (Candidate c : later) out.add(c.name);
         return out;
     }
 
-    /** The session gave up on this decoder (it gave no picture): it's tried last for {@link #FORGET_MS}. */
+    /** How long a decoder that failed {@code times} times in a row is tried last: FORGET_MS, doubled each further time. */
+    static long restMs(int times) {
+        long ms = FORGET_MS;
+        for (int i = 1; i < times && ms < REST_MAX_MS; i++) ms *= 2;
+        return Math.min(ms, REST_MAX_MS);
+    }
+
+    /** The decoder failed lately: it's tried last, and not switched back to, for now. */
+    static boolean resting(String canonical, Map<String, Long> gaveNothing, Map<String, Integer> times, long nowMs) {
+        Long t = gaveNothing.get(canonical);
+        if (t == null) return false;
+        Integer n = times.get(canonical);
+        return nowMs - t < restMs(n == null ? 1 : n);
+    }
+
+    /** This decoder failed (no picture, or it wouldn't start): it's tried last for {@link #restMs} of its failures. */
     static synchronized void gaveNothing(String name) {
         if (name == null || name.isEmpty()) return;
-        candidates();
-        String canonical = name;
-        for (Candidate c : listed) if (c.name.equals(name)) canonical = c.canonical;
+        String canonical = canonical(name);
         gaveNothing.put(canonical, SystemClock.elapsedRealtime());
+        Integer n = timesInARow.get(canonical);
+        timesInARow.put(canonical, n == null ? 1 : n + 1);
+    }
+
+    /** This decoder has shown pictures for {@link #CLEARED_AFTER_NS}: its failures are forgotten. */
+    static synchronized void gavePictures(String name) {
+        if (name == null || name.isEmpty()) return;
+        String canonical = canonical(name);
+        gaveNothing.remove(canonical);
+        timesInARow.remove(canonical);
+    }
+
+    /** This decoder failed before, and hasn't shown pictures long enough since to forget it. */
+    static synchronized boolean failedBefore(String name) {
+        return name != null && !name.isEmpty() && timesInARow.containsKey(canonical(name));
+    }
+
+    /**
+     * The decoder to switch to now from {@code running} (in the middle of a session), or null to keep it: only from the
+     * software decoder, to the best hardware one that isn't resting.
+     */
+    static synchronized String better(String running) {
+        if (running == null || running.isEmpty()) return null;
+        return better(candidates(), canonical(running), gaveNothing, timesInARow, SystemClock.elapsedRealtime());
+    }
+
+    static String better(List<Candidate> ranked, String runningCanonical, Map<String, Long> gaveNothing,
+                         Map<String, Integer> times, long nowMs) {
+        Candidate running = null;
+        for (Candidate c : ranked) if (c.canonical.equals(runningCanonical)) running = c;
+        if (running == null || running.hardware) return null;
+        for (Candidate c : ranked) {
+            if (c.hardware && !resting(c.canonical, gaveNothing, times, nowMs)) return c.name;
+        }
+        return null;
+    }
+
+    /** The name a decoder's failures are kept under: its codec's, for an alias. (Holding the lock.) */
+    private static String canonical(String name) {
+        candidates();
+        for (Candidate c : listed) if (c.name.equals(name)) return c.canonical;
+        return name;
     }
 
     /** The decoder the next one will be, by name ("" when the phone lists none). */

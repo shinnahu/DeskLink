@@ -107,13 +107,11 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     private TouchInput touch;
     private volatile VideoDecoder decoder;
     private final AudioPlayer audio = new AudioPlayer(); // the PC's sound
-    private boolean noSoundShown; // "The PC has no sound output" was said (again once there was sound)
     private VideoSurface videoSurface;   // the TextureView's surface (null until it has one)
     private VideoSurface decoderSurface; // the surface the decoder draws on
     private boolean started;             // between onStart and onStop: the decoder may run
     private boolean waitingForSurface;   // the next decoder waits for the last one to let go of the surface
-    private boolean decoderGaveUp;       // a decoder gave no picture while waiting for this one (the overlay says so)
-    private boolean softwareNoteShown;
+    private long decoderStartedAt;       // when the decoder in use was made (elapsedRealtime)
     // the surfaces' bookkeeping outlives onDestroy (which clears `main`): a codec lets go of its surface after that
     private final Handler surfaceHandler = new Handler(Looper.getMainLooper());
     private final Object pcLogLock = new Object();
@@ -980,7 +978,6 @@ public final class SessionActivity extends Activity implements HostConnection.Li
                     spinner = true;
                 } else {
                     title = getString(R.string.conn_waiting_video);
-                    if (decoderGaveUp) detail = getString(R.string.conn_decoder_retry);
                     spinner = true;
                 }
                 bg = ever && format != null ? 0xD9000000 : Color.BLACK;
@@ -1097,13 +1094,6 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         refreshScreenButtons(); // shown when it has more than one screen
         refreshShotButton(); // shown when it takes screenshots
         shotPending = false;
-        // what reaches this PC over mobile data: said once, and again whenever it changes
-        final int rf = hostInfo != null ? hostInfo.remoteFlags : -1;
-        if (rf >= 0 && (rf & Protocol.REMOTE_CHECKING) == 0 && rf != prefs.remoteShown(hostId)) {
-            prefs.setRemoteShown(hostId, rf);
-            final String note = remoteSummary(rf);
-            main.postDelayed(() -> showSnack(note, -1, null, null, 8000), 1500);
-        }
         if (hostInfo != null && hostInfo.hostName != null && !hostInfo.hostName.isEmpty()) {
             PairedHost h = store.get(hostId);
             if (h != null) hostName = h.name();
@@ -1113,7 +1103,6 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         shapeId = -1;
         cursorView.setShape(null);
         hostStatusFlags = 0;
-        decoderGaveUp = false;
         VideoDecoder d = decoder;
         if (d != null) d.resetStream();
         // Always START (RemoteSession pauses right after when we're in the background, and a later RESUME
@@ -1144,12 +1133,6 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         boolean none = f.codec == Protocol.AUDIO_CODEC_NONE;
         if (none) audio.stop();
         else if (prefs.sound()) audio.start(f);
-        main.post(() -> {
-            if (none && !noSoundShown && !isFinishing()) {
-                showSnack(getString(R.string.note_no_sound), -1, null, null, 6000);
-            }
-            noSoundShown = none;
-        });
     }
 
     @Override
@@ -1408,6 +1391,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         decoderSurface = vs;
         d.start();
         decoder = d;
+        decoderStartedAt = SystemClock.elapsedRealtime();
         HostConnection c = session == null ? null : session.connection();
         if (c != null) c.requestKeyframe();
     }
@@ -1438,17 +1422,30 @@ public final class SessionActivity extends Activity implements HostConnection.Li
 
     /**
      * The decoder gave no picture (DecoderWatch): the next one takes over, on a new surface when the old one may be
-     * the trouble. The one given up on is tried last for a while (closing the app brings it back sooner).
+     * the trouble. The one given up on is tried last for a while, then again by itself (switchToFasterDecoder).
      */
     private void giveUpOnDecoder(DecoderWatch.Trouble t) {
         VideoDecoder.gaveNothing(t.codec);
-        decoderGaveUp = true;
         pcLog("gave up on " + (t.codec.isEmpty() ? "the decoder" : t.codec) + ": " + t.why + "; next: "
                 + VideoDecoder.next());
         stopDecoder();
         if (t.surface) newVideoView();
         else startDecoder(); // once the old one has let go of the surface
         refreshOverlay();
+    }
+
+    /**
+     * On the software decoder because a faster one failed: once that one is due to be tried again
+     * (VideoDecoder.better), switch back to it, with no message. If it still shows no picture, it's given up on
+     * after 2 s and tried again after twice as long as before.
+     */
+    private void switchToFasterDecoder(VideoDecoder vd) {
+        if (vd != decoder || SystemClock.elapsedRealtime() - decoderStartedAt < 10_000) return;
+        String faster = VideoDecoder.better(vd.codecName());
+        if (faster == null) return;
+        pcLog("trying " + faster + " again instead of " + vd.codecName());
+        stopDecoder();
+        startDecoder(); // once the old one has let go of the surface
     }
 
     /** A line for the PC's log (DeskLink 2.9 or later on the PC writes it there; older ones ignore it). Any thread. */
@@ -1474,12 +1471,6 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     public void onFirstFrame() {
         main.post(() -> {
             if (session != null) session.firstFrame();
-            VideoDecoder d = decoder;
-            if (decoderGaveUp && d != null && d.software() && !softwareNoteShown) {
-                softwareNoteShown = true;
-                showSnack(getString(R.string.note_software_decoder), -1, null, null, 10000);
-            }
-            decoderGaveUp = false;
         });
     }
 
@@ -2073,15 +2064,6 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         s.show();
     }
 
-    /** One line on reaching this PC away from home, from the flags it reported (Protocol.REMOTE_*). */
-    private String remoteSummary(int f) {
-        if ((f & Protocol.REMOTE_OFF) != 0) return getString(R.string.remote_off);
-        if ((f & (Protocol.REMOTE_IPV4 | Protocol.REMOTE_IPV6)) != 0) return getString(R.string.remote_ready);
-        if ((f & Protocol.REMOTE_IPV6_MAYBE) != 0) return getString(R.string.remote_maybe_v6);
-        if ((f & Protocol.REMOTE_SHARED_IPV4) != 0) return getString(R.string.remote_shared);
-        return getString(R.string.remote_no_upnp);
-    }
-
     /** "Can't reach": the usual checks, and on mobile data the likely reason, from what the PC last reported. */
     private String unreachableHint() {
         String why = mobileDataReason();
@@ -2108,10 +2090,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
             return (f & Protocol.REMOTE_NO_UPNP) != 0 ? s + " " + getString(R.string.away_try_upnp) : s;
         }
         if (v6) return getString(R.string.away_ready);
-        if ((f & Protocol.REMOTE_SHARED_IPV4) != 0) {
-            String s = getString(R.string.away_shared);
-            return v6maybe ? s + " " + getString(R.string.away_v6_hint) : s;
-        }
+        if ((f & Protocol.REMOTE_SHARED_IPV4) != 0) return getString(R.string.away_shared);
         return getString(R.string.away_no_upnp); // UPnP also opens IPv6 on routers that can
     }
 
@@ -2249,6 +2228,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         if (vd != null && c != null && (state == RemoteSession.State.WAITING_VIDEO || state == RemoteSession.State.LIVE)) {
             DecoderWatch.Trouble t = vd.trouble();
             if (t != null) giveUpOnDecoder(t);
+            else if (state == RemoteSession.State.LIVE) switchToFasterDecoder(vd);
         }
         pingText.setText(c != null && rtt >= 0 ? String.format(Locale.US, "%d ms", rtt) : "");
         int fps = framesRendered.getAndSet(0);
@@ -2256,7 +2236,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         long delta = statsBytes >= 0 && bytes >= statsBytes ? bytes - statsBytes : 0;
         statsBytes = bytes;
         String soundProblem = audio.takeProblem();
-        if (soundProblem != null) showSnack(soundProblem, -1, null, null, 8000);
+        if (soundProblem != null) pcLog(soundProblem); // for the PC's log, not the screen
         if (statsText.getVisibility() == View.VISIBLE) {
             String mbps = String.format(Locale.US, "%.1f", delta * 8 / 1_000_000.0);
             int w = format != null ? format.width : 0, h = format != null ? format.height : 0;

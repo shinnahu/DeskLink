@@ -1,9 +1,9 @@
 package com.desklink.app;
 
 /**
- * When to give up on a video decoder. Some phones' hardware decoder gets stuck: it takes the video and gives no picture,
- * and new decoders made by the same app give none either, until the app is closed. Then the session would wait for the
- * screen forever. A decoder is given up on when, for {@link #GIVE_UP_NS}:
+ * When to give up on a video decoder. Some phones' hardware decoder gets stuck: it takes the video and gives no picture
+ * (one did on 2026-11-14, through five reconnects). Then the session would wait for the screen forever. A decoder is
+ * given up on when, for {@link #GIVE_UP_NS} (a shorter time for the first case, when the caller says so):
  * <ul>
  * <li>a keyframe was handed to it and no picture came out (also when it keeps failing and being made again),</li>
  * <li>its thread has been inside one call (making, starting, feeding or letting go of the codec), or</li>
@@ -69,10 +69,13 @@ final class DecoderWatch {
     }
 
     /** Why the decoder should be given up on now, or null while it's fine. */
-    synchronized Trouble trouble(long now) {
+    synchronized Trouble trouble(long now) { return trouble(now, GIVE_UP_NS); }
+
+    /** The same, with {@code pictureNs} for a picture to come out after a keyframe instead of {@link #GIVE_UP_NS}. */
+    synchronized Trouble trouble(long now, long pictureNs) {
         if (busySince != 0 && now - busySince >= GIVE_UP_NS)
             return new Trouble("stuck " + secs(now - busySince) + " " + busyWhat + " " + busyCodec, busyCodec, true);
-        if (keySince != 0 && now - keySince >= GIVE_UP_NS)
+        if (keySince != 0 && now - keySince >= pictureNs)
             return new Trouble("no picture " + secs(now - keySince) + " after a keyframe", keyCodec, false);
         if (noCodecSince != 0 && now - noCodecSince >= GIVE_UP_NS)
             return new Trouble("no decoder would start for " + secs(now - noCodecSince), "", true);

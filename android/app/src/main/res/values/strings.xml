@@ -21,12 +21,6 @@
     <string name="add_pc">Add PC</string>
     <string name="empty_title">No PCs linked yet</string>
     <string name="empty_body">Install DeskLink Host on your Windows PC, then tap “Add PC” while this phone is on the same Wi-Fi.</string>
-    <string name="tip_remote">Away from home, DeskLink reaches your PC over mobile data when the PC\'s router allows it. The DeskLink menu on the PC (tray icon) says whether it does.</string>
-    <string name="remote_ready">Mobile data: ready. You can use this PC away from home too.</string>
-    <string name="remote_off">Mobile data is turned off on this PC (DeskLink\'s tray menu on the PC).</string>
-    <string name="remote_maybe_v6">Away from home this PC can only work over IPv6, and only if its router lets those connections in.</string>
-    <string name="remote_shared">Mobile data can\'t reach this PC: its internet company shares one address between many homes (CGNAT).</string>
-    <string name="remote_no_upnp">Mobile data can\'t reach this PC yet: its router didn\'t let DeskLink open the way in (UPnP is off or not supported).</string>
     <string name="status_checking">Checking…</string>
     <string name="status_online">Online</string>
     <string name="status_in_use">Online · in use by %1$s</string>
@@ -72,7 +66,6 @@
     <!-- Session -->
     <string name="conn_connecting">Connecting to %1$s…</string>
     <string name="conn_waiting_video">Waiting for the screen…</string>
-    <string name="conn_decoder_retry">The phone\'s video decoder gave no picture. Trying another one…</string>
     <string name="conn_lost">Connection lost</string>
     <string name="conn_reconnecting">Reconnecting… (attempt %1$d)</string>
     <string name="conn_reconnecting_simple">Reconnecting…</string>
@@ -84,8 +77,7 @@
     <string name="away_off">Mobile data access is turned off on the PC: turn on \"Allow access over mobile data\" in DeskLink\'s menu on the PC (icon next to the clock).</string>
     <string name="away_no_upnp">The PC\'s router doesn\'t let DeskLink open the way in. Turn on UPnP in the router\'s settings, then on the PC turn \"Allow access over mobile data\" off and on again (DeskLink menu, next to the clock).</string>
     <string name="away_shared">The PC\'s internet company shares one address between many homes (CGNAT), so mobile data can\'t reach it. You can ask them for a public IP address.</string>
-    <string name="away_v6_hint">It may still work over IPv6 if the router lets incoming IPv6 connections in (look for the IPv6 firewall in its settings).</string>
-    <string name="away_no_ipv6">From outside, the PC can only be reached over IPv6, and this phone\'s mobile data has no IPv6 right now.</string>
+    <string name="away_no_ipv6">This phone\'s mobile data can\'t reach your home\'s internet connection right now.</string>
     <string name="away_try_upnp">Turning on UPnP in the PC\'s router would fix it.</string>
     <string name="away_ready">The PC said it can be reached over mobile data. It may be asleep or off, or your home\'s internet address changed: connect once at home over Wi-Fi to update it.</string>
     <string name="conn_ended_pc">Sharing was stopped on the PC</string>
@@ -266,8 +258,6 @@
     <string name="set_sound">Sound</string>
     <string name="set_sound_play">Play the PC\'s sound</string>
     <string name="set_sound_sum">What the PC\'s speakers play comes out of the phone; the volume keys set it. Needs DeskLink 2.7 on the PC.</string>
-    <string name="note_no_sound">No sound: the PC has no speakers or headphones on right now</string>
-    <string name="note_software_decoder">The phone\'s video decoder stopped answering, so the picture comes from its slower software decoder. Closing DeskLink from Recent apps tries the fast one again.</string>
     <string name="set_clipboard">Clipboard</string>
     <string name="set_clipboard_sum">Copy on one side, paste on the other.</string>
     <string name="set_security">Security</string>

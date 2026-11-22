@@ -125,11 +125,6 @@ public final class MainActivity extends Activity {
         emptyView = empty;
         col.addView(empty);
 
-        TextView tip = Ui.text(this, getString(R.string.tip_remote), 13, Ui.color(this, R.color.text_dim), false);
-        LinearLayout.LayoutParams tipLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        tipLp.topMargin = Ui.dp(this, 18);
-        col.addView(tip, tipLp);
-
         scroll.addView(col);
         root.addView(scroll, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setUpPullToRefresh(root);

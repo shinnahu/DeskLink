@@ -1,6 +1,7 @@
 package com.desklink.app;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
 
@@ -10,8 +11,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Which H.264 decoder is tried first (VideoDecoder.rank / order). The first is the one DeskLink always used; one that
- * gave no picture goes to the back of the line for 10 minutes, so the next try is another one, the software one last.
+ * Which H.264 decoder is tried first (VideoDecoder.rank / order / better). The first is the one DeskLink always used;
+ * one that failed goes to the back of the line for 2 minutes, twice as long each further time in a row, so the next try
+ * is another one, the software one last. From the software decoder the session goes back to a hardware one once it has
+ * rested.
  */
 public class DecoderOrderTest {
     private static VideoDecoder.Candidate hw(String name, String canonical, boolean lowLatency) {
@@ -71,7 +74,44 @@ public class DecoderOrderTest {
     }
 
     @Test
-    public void forgottenAfterTenMinutes() {
+    public void restsTwiceAsLongEachTimeInARow() {
+        assertEquals(VideoDecoder.FORGET_MS, VideoDecoder.restMs(1));
+        assertEquals(2 * VideoDecoder.FORGET_MS, VideoDecoder.restMs(2));
+        assertEquals(4 * VideoDecoder.FORGET_MS, VideoDecoder.restMs(3));
+        assertEquals(VideoDecoder.REST_MAX_MS, VideoDecoder.restMs(50)); // an hour at most
+        List<VideoDecoder.Candidate> ranked = VideoDecoder.rank(LISTED);
+        Map<String, Long> gave = new HashMap<>();
+        Map<String, Integer> times = new HashMap<>();
+        long now = 50_000_000L;
+        gave.put("c2.qti.avc.decoder", now - VideoDecoder.FORGET_MS); // a first rest would be over...
+        times.put("c2.qti.avc.decoder", 2);                           // ...but it failed twice in a row
+        assertEquals("c2.qti.avc.decoder.low_latency", VideoDecoder.order(ranked, gave, times, now).get(0));
+        gave.put("c2.qti.avc.decoder", now - 2 * VideoDecoder.FORGET_MS);
+        assertEquals("OMX.qcom.video.decoder.avc", VideoDecoder.order(ranked, gave, times, now).get(0));
+    }
+
+    @Test
+    public void backToHardwareOnlyFromSoftwareAndOnlyOnceItRested() {
+        List<VideoDecoder.Candidate> ranked = VideoDecoder.rank(LISTED);
+        Map<String, Long> gave = new HashMap<>();
+        Map<String, Integer> times = new HashMap<>();
+        long now = 50_000_000L;
+        // both hardware decoders failed lately: the software one runs, and stays
+        gave.put("c2.qti.avc.decoder", now - 1000);
+        gave.put("c2.qti.avc.decoder.low_latency", now - 500);
+        times.put("c2.qti.avc.decoder", 1);
+        times.put("c2.qti.avc.decoder.low_latency", 1);
+        assertNull(VideoDecoder.better(ranked, "c2.android.avc.decoder", gave, times, now));
+        // the first one has rested: back to it, by the name it's listed under first
+        gave.put("c2.qti.avc.decoder", now - VideoDecoder.FORGET_MS);
+        assertEquals("OMX.qcom.video.decoder.avc", VideoDecoder.better(ranked, "c2.android.avc.decoder", gave, times, now));
+        // never away from a hardware decoder, nor from one the phone doesn't list
+        assertNull(VideoDecoder.better(ranked, "c2.qti.avc.decoder.low_latency", gave, times, now));
+        assertNull(VideoDecoder.better(ranked, "some.other.decoder", gave, times, now));
+    }
+
+    @Test
+    public void forgottenAfterItsRest() {
         List<VideoDecoder.Candidate> ranked = VideoDecoder.rank(LISTED);
         Map<String, Long> gave = new HashMap<>();
         long now = 50_000_000L;

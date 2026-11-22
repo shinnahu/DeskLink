@@ -83,6 +83,19 @@ public class DecoderWatchTest {
     }
 
     @Test
+    public void lessTimeForADecoderThatFailedBefore() {
+        // tried again after failing: 2 s to show a picture after a keyframe; a call that hangs still gets 4 s
+        DecoderWatch w = new DecoderWatch();
+        w.keyIn("c2.qti.avc.decoder", T0);
+        assertNull(w.trouble(T0 + 1_900_000_000L, 2 * S));
+        assertNotNull(w.trouble(T0 + 2 * S, 2 * S));
+        DecoderWatch h = new DecoderWatch();
+        h.enter("starting", "c2.qti.avc.decoder", T0);
+        assertNull(h.trouble(T0 + 3 * S, 2 * S));
+        assertNotNull(h.trouble(T0 + 4 * S, 2 * S));
+    }
+
+    @Test
     public void noDecoderWouldStart() {
         DecoderWatch w = new DecoderWatch();
         w.noCodec(T0);
