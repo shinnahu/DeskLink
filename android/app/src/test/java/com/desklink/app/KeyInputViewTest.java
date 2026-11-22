@@ -4,7 +4,9 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.robolectric.Shadows.shadowOf;
 
+import android.os.Looper;
 import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.inputmethod.EditorInfo;
@@ -19,6 +21,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -34,6 +37,7 @@ public class KeyInputViewTest {
     private final StringBuilder pc = new StringBuilder();
     private int keystrokes;
     private int enters;                                   // Enter presses: in a chat, each sends the message
+    private int enterUps;                                 // ...and their key-ups, when Enter came as a key
     private final List<String> pastes = new ArrayList<>(); // what went to the PC as a paste
     private String clipboard;                             // what the app knows the phone clipboard holds
     private KeyInputView view;
@@ -54,7 +58,10 @@ public class KeyInputViewTest {
             }
             @Override public boolean isClipboard(String text) { return text.equals(clipboard); }
             @Override public void keyTap(int vk) { key(vk); }
-            @Override public void keyEvent(int vk, boolean down) { if (down) key(vk); }
+            @Override public void keyEvent(int vk, boolean down) {
+                if (down) key(vk);
+                else if (vk == Vk.RETURN) enterUps++;
+            }
             @Override public boolean modifiersActive() { return false; }
         });
         view.setPredictive(true);
@@ -81,6 +88,9 @@ public class KeyInputViewTest {
         ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode));
         ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, keyCode));
     }
+
+    /** A moment passes, shorter than between two taps of a finger: what the keyboard put in at once is over. */
+    private void pause() { shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(120)); }
 
     @Test
     public void letterAfterWordAndDotReEditsThatWord() {
@@ -178,12 +188,14 @@ public class KeyInputViewTest {
     @Test
     public void deletingCountsCharactersOnThePc() {
         ic.commitText("a😀", 1); // "a" and an emoji (two Java chars, one character on the PC)
+        pause();
         int was = keystrokes;
         ic.deleteSurroundingText(2, 0);
         assertEquals("one Backspace for the emoji", was + 1, keystrokes);
         assertEquals("a", pc.toString());
         assertEquals("a", before());
         ic.commitText("😀b", 1);
+        pause();
         ic.deleteSurroundingTextInCodePoints(2, 0);
         assertEquals("a", pc.toString());
         assertEquals("a", before());
@@ -195,6 +207,7 @@ public class KeyInputViewTest {
         // as an Enter press, which sends a chat message, so the keyboard's paste must not be typed as it is.
         String line = "Edge has an enhance videos feature, is this option available in tacit? If not add it and put it as default.\n";
         ic.commitText(line, 1);
+        pause();
         assertEquals(Arrays.asList(line), pastes);
         assertEquals("no Enter press", 0, enters);
         assertEquals(line, pc.toString());
@@ -207,6 +220,7 @@ public class KeyInputViewTest {
         ic.finishComposingText();
         ic.commitText(" ", 1);
         ic.commitText("first line\r\nsecond line", 1);
+        pause();
         assertEquals(Arrays.asList("first line\r\nsecond line"), pastes);
         assertEquals(0, enters);
         assertEquals("see first line\r\nsecond line", pc.toString());
@@ -217,6 +231,7 @@ public class KeyInputViewTest {
         // a keyboard may commit the word it corrected together with Enter: that's typing, Enter included
         compose("teh");
         ic.commitText("the\n", 1);
+        pause();
         assertTrue(pastes.isEmpty());
         assertEquals(1, enters);
         assertEquals("the\n", pc.toString());
@@ -229,9 +244,11 @@ public class KeyInputViewTest {
     public void theClipboardsTextIsPasted() {
         clipboard = "Edge has an enhance videos feature";
         ic.commitText(clipboard, 1);
+        pause();
         assertEquals(Arrays.asList(clipboard), pastes);
         assertEquals("the same line stays text before the caret", clipboard, before());
         ic.commitText("hello world", 1); // not the clipboard, no line break: typed
+        pause();
         assertEquals(1, pastes.size());
         assertEquals(clipboard + "hello world", pc.toString());
     }
@@ -242,6 +259,7 @@ public class KeyInputViewTest {
         clipboard = "Edge has an enhance videos feature";
         compose("Edg");
         ic.commitText(clipboard, 1);
+        pause();
         assertEquals(Arrays.asList("e has an enhance videos feature"), pastes);
         assertEquals(clipboard, pc.toString());
     }
@@ -250,9 +268,11 @@ public class KeyInputViewTest {
     public void keysWithLinesArePasted() {
         long t = SystemClock.uptimeMillis();
         ic.sendKeyEvent(new KeyEvent(t, "one\ntwo", 0, 0)); // text sent as one key event (ACTION_MULTIPLE)
+        pause();
         assertEquals(Arrays.asList("one\ntwo"), pastes);
         assertEquals(0, enters);
         ic.sendKeyEvent(new KeyEvent(t, "ab", 0, 0)); // two letters: typed
+        pause();
         assertEquals(1, pastes.size());
         assertEquals("one\ntwoab", pc.toString());
     }
@@ -274,7 +294,139 @@ public class KeyInputViewTest {
         assertFalse(ic.setComposingRegion(0, 5));       // forgotten
         assertTrue(ic.setComposingRegion(2496, 2501));  // "hello"
         ic.setComposingText("help", 1);
+        pause();
         assertTrue(pc.toString().endsWith("xx help"));
         assertEquals(2500, pc.length());
+    }
+
+    // A paste that the keyboard hands over in pieces. Each line break would be an Enter: the chat sends the first line.
+
+    @Test
+    public void linesWithEnterKeysBetweenAreOnePaste() {
+        ic.commitText("first line of it", 1);
+        press(KeyEvent.KEYCODE_ENTER);
+        ic.commitText("second line", 1);
+        press(KeyEvent.KEYCODE_ENTER);
+        press(KeyEvent.KEYCODE_ENTER);
+        ic.commitText("after an empty one", 1);
+        pause();
+        assertEquals(Arrays.asList("first line of it\nsecond line\n\nafter an empty one"), pastes);
+        assertEquals("no Enter press", 0, enters);
+        assertEquals("no Enter key-up on its own", 0, enterUps);
+        assertEquals("the keyboard starts over, as after Enter", "", before());
+    }
+
+    @Test
+    public void linesWithCommittedBreaksBetweenAreOnePaste() {
+        ic.commitText("first line of it", 1);
+        ic.commitText("\n", 1);
+        ic.commitText("second line", 1);
+        ic.commitText("\r\n", 1);
+        ic.commitText("3", 1);
+        pause();
+        assertEquals(Arrays.asList("first line of it\nsecond line\r\n3"), pastes);
+        assertEquals(0, enters);
+    }
+
+    @Test
+    public void linesWithEditorActionsBetweenAreOnePaste() {
+        ic.commitText("first line of it", 1);
+        ic.performEditorAction(EditorInfo.IME_ACTION_DONE);
+        ic.commitText("second line", 1);
+        pause();
+        assertEquals(Arrays.asList("first line of it\nsecond line"), pastes);
+        assertEquals(0, enters);
+    }
+
+    @Test
+    public void aPasteMayStartWithAOneWordLine() {
+        ic.commitText("Hi,", 1);
+        press(KeyEvent.KEYCODE_ENTER);
+        ic.commitText("second line", 1);
+        pause();
+        assertEquals(Arrays.asList("Hi,\nsecond line"), pastes);
+        assertEquals(0, enters);
+    }
+
+    @Test
+    public void aLineComposedAndThenCommittedWithItsBreakIsPasted() {
+        ic.setComposingText("first line of it", 1);
+        ic.commitText("first line of it\n", 1);
+        pause();
+        assertEquals(Arrays.asList("first line of it\n"), pastes);
+        assertEquals(0, enters);
+    }
+
+    @Test
+    public void wholeLinesCommittedOneByOneAreOnePaste() {
+        // two pastes right after each other would both paste what's on the PC's clipboard last
+        ic.commitText("first line of it\n", 1);
+        ic.commitText("second line\n", 1);
+        pause();
+        assertEquals(Arrays.asList("first line of it\nsecond line\n"), pastes);
+        assertEquals("first line of it\nsecond line\n", pc.toString());
+    }
+
+    @Test
+    public void enterAMomentAfterTextIsStillEnter() {
+        ic.commitText("first line of it", 1); // a suggestion, dictation, or a paste of one line
+        pause();
+        press(KeyEvent.KEYCODE_ENTER);
+        assertTrue(pastes.isEmpty());
+        assertEquals(1, enters);
+        assertEquals(1, enterUps);
+        assertEquals("first line of it\n", pc.toString());
+    }
+
+    @Test
+    public void aWordAndEnterAtOnceIsStillEnter() {
+        ic.commitText("the", 1); // a whole word put in at once, with Enter right behind it
+        press(KeyEvent.KEYCODE_ENTER);
+        pause();
+        assertTrue(pastes.isEmpty());
+        assertEquals(1, enters);
+        assertEquals("the\n", pc.toString());
+        assertEquals("the keyboard starts over, as after Enter", "", before());
+    }
+
+    @Test
+    public void aCorrectionAndEnterAtOnceIsStillEnter() {
+        compose("helo");
+        ic.commitText("hello", 1);
+        press(KeyEvent.KEYCODE_ENTER);
+        assertTrue(pastes.isEmpty());
+        assertEquals("at once: nothing waits", 1, enters);
+        assertEquals("hello\n", pc.toString());
+    }
+
+    @Test
+    public void typingDoesNotWait() {
+        compose("word");
+        assertEquals("word", pc.toString());
+        ic.commitText("word", 1);
+        ic.commitText(" ", 1);
+        assertEquals("word ", pc.toString());
+        press(KeyEvent.KEYCODE_A);
+        press(KeyEvent.KEYCODE_ENTER);
+        assertEquals("word a\n", pc.toString());
+    }
+
+    @Test
+    public void textPutInAtOnceKeepsItsPlaceAmongKeysAndClicks() {
+        ic.commitText("two words", 1);
+        press(KeyEvent.KEYCODE_DEL); // Backspace right behind it deletes its last letter
+        assertEquals("two word", pc.toString());
+        ic.commitText("more words", 1);
+        view.resetComposition(); // a click: the text goes before it
+        assertEquals("two wordmore words", pc.toString());
+    }
+
+    @Test
+    public void textPutInAtOnceCanBeEditedBeforeItGoes() {
+        ic.commitText("two wrds", 1);
+        ic.deleteSurroundingText(3, 0);
+        ic.commitText("ords", 1);
+        pause();
+        assertEquals("two words", pc.toString());
     }
 }

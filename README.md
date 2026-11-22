@@ -4,8 +4,8 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 
 | part | file | size |
 |---|---|---|
-| Windows host (your PC) | `dist/DeskLinkHost.exe` | 721 KB (version 2.10), no install required to try |
-| Android app (your phone) | `dist/DeskLink.apk` | 197 KB (version 2.13) |
+| Windows host (your PC) | `dist/DeskLinkHost.exe` | 723 KB (version 2.11), no install required to try |
+| Android app (your phone) | `dist/DeskLink.apk` | 198 KB (version 2.14) |
 
 On GitHub, both files are attached to each release (*Releases*, on the right of the repository page) rather than kept
 in the code.
@@ -128,7 +128,10 @@ so a line break in it doesn't send a chat message. With *Clipboard* on (Settings
 text on its clipboard and presses Ctrl+V, the way a paste on the PC works; the PC's clipboard then holds that text.
 With *Clipboard* off, or with an older PC, the text is typed and each line break is Shift+Enter, a new line in chats
 where Enter sends. The keyboard's text counts as a paste when it's more than one character with a line break, or the
-phone's clipboard as DeskLink last saw it.
+phone's clipboard as DeskLink last saw it. From 2.14, a paste that the keyboard hands over in pieces (a line, Enter, the
+next line, a few ms apart) counts as one. From PC 2.11, so does typed text with line breaks inside it, which is how phones
+before 2.13 send a paste. If you right-clicked first, PC 2.11 closes that menu (when Windows reports it) before the text
+goes in: an open menu would swallow it. A word and Enter are still typing, and Enter sends.
 
 **Shortcut bar** (shown while the button above is on: at the bottom of the screen, or above the keyboard, sliding with
 it; with the button off it doesn't show, not even with the keyboard).
@@ -503,6 +506,16 @@ corrected together with Enter still pressing Enter, text sent as key events), a 
 clipboard before Ctrl+V, which comes between a Backspace and a letter; the keys recorded, not injected; the clipboard's
 own text put back), and over 127.0.0.1 a paste the PC typed without a clipboard, Shift+Enter between its lines (23
 checks, all passing). Not yet tried on the phone.
+Version 2.11 (PC) and 2.14 (phone) fix three more paste faults. On 2026-11-22 a right-click paste from
+the phone was reported to still press Enter, while the paste shortcut worked. What the phone sent that time isn't known.
+Three faults were reproduced: text with line breaks sent as typed text (phones before 2.13) pressed Enter, so did a paste
+handed over in pieces, and with a right-click menu open a paste was lost, or typed text went into the menu. The phone
+now joins what the keyboard puts in within 80 ms of each other, the PC takes typed text with line breaks inside it as a
+paste, and it closes a right-click menu before text put in at once. A paste right behind another is typed, so it doesn't
+replace the first on the clipboard. Checked with unit tests (12 new), the app's session screen feeding the real host and
+a stand-in chat box in Electron (in a window station of its own; input played as window messages, not injected), a
+classic Windows menu, and over 127.0.0.1 (24 checks, all passing). Later that day, with both installed, a paste of
+several lines from the phone was reported to paste fine; how it was sent isn't known either.
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del);
@@ -518,6 +531,8 @@ Not yet verified:
   log (2.9), and a decoder given up on (seen once, on 2026-11-14).
 * 2.13 on the phone: a paste from the keyboard into a chat on the PC (2.10), with *Clipboard* on and off, and with an
   older PC.
+* 2.14 / PC 2.11: a paste of several lines from Samsung's keyboard into a real chat, with and without a right click
+  first; closing a menu with the installed service, and menus Windows doesn't report (Windows 11's File Explorer, say).
 
 ## Build from source
 

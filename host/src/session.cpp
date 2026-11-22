@@ -12,6 +12,8 @@ static constexpr size_t kBulkQueueCap = 2 * 1024 * 1024;
 static constexpr size_t kAudioQueueCap = 50;  // AAC frames: about a second
 static constexpr int kPhoneLogPerMinute = 30;  // CLIENT_LOG lines written to the log; more are dropped
 static constexpr size_t kPhoneLogMax = 400;    // bytes of one line
+static constexpr size_t kPasteMax = 1024 * 1024;  // bytes, as the clipboard's
+static constexpr uint64_t kPasteApartMs = 500;    // pastes closer than this don't share the clipboard (see PostPaste)
 
 Session::Session(std::unique_ptr<SecureChannel> ch, PairedDevice dev) : ch_(std::move(ch)), dev_(std::move(dev)) {
   lastRecv_ = NowMs();
@@ -219,6 +221,29 @@ void Session::Cleanup() {
   Log("session %s: ended", dev_.name.c_str());
 }
 
+// Pasted on the PC with Ctrl+V when the phone shares its clipboard (the text is put there first, and the input thread
+// waits for that), otherwise typed, line breaks as Shift+Enter. Either way it keeps its place among the keys around it.
+// A paste right behind another is typed: on the clipboard it would replace the first before that one is pasted.
+void Session::PostPaste(const std::string& text) {
+  InputEvent e;
+  e.type = InputEvent::Paste;
+  e.text = U2W(text);
+  if (e.text.empty()) return;
+  uint64_t now = NowMs();
+  bool rightBehind = lastPasteMs_ && now - lastPasteMs_ < kPasteApartMs;
+  lastPasteMs_ = now;
+  if (clipboardSync_ && !rightBehind && text.size() <= kPasteMax) {
+    auto put = std::make_shared<std::promise<bool>>();
+    e.onClipboard = put->get_future().share();
+    {
+      std::lock_guard<std::mutex> lk(clipMu_);
+      lastClipSent_ = text;  // don't send it back
+    }
+    ui::SetClipboardText(text, [put](bool ok) { put->set_value(ok); });
+  }
+  g_app->input.Post(std::move(e));
+}
+
 void Session::Handle(const Bytes& m) {
   Reader r(m.data() + 1, m.size() - 1);
   switch (m[0]) {
@@ -342,33 +367,24 @@ void Session::Handle(const Bytes& m) {
     case msg::TEXT: {
       size_t n = 0;
       const uint8_t* p = r.rest(n);
+      std::string text((const char*)p, n);
       InputEvent e;
       e.type = InputEvent::Text;
-      e.text = U2W(std::string((const char*)p, n));
-      if (!e.text.empty()) g_app->input.Post(std::move(e));
+      e.text = U2W(text);
+      if (e.text.empty()) break;
+      if (InputInjector::LooksPasted(e.text)) {  // typed, its line breaks would be Enter, which sends a chat message
+        Log("session %s: text with line breaks, taken as a paste", dev_.name.c_str());
+        PostPaste(text);
+      } else {
+        g_app->input.Post(std::move(e));
+      }
       break;
     }
     case msg::PASTE: {
-      // Pasted on the PC with Ctrl+V when the phone shares its clipboard (the text is put there first, and the input
-      // thread waits for that), otherwise typed. Either way it keeps its place among the keys around it.
       size_t n = 0;
       const uint8_t* p = r.rest(n);
-      if (n == 0 || n > 1024 * 1024) break;
-      std::string text((const char*)p, n);
-      InputEvent e;
-      e.type = InputEvent::Paste;
-      e.text = U2W(text);
-      if (e.text.empty()) break;
-      if (clipboardSync_) {
-        auto put = std::make_shared<std::promise<bool>>();
-        e.onClipboard = put->get_future().share();
-        {
-          std::lock_guard<std::mutex> lk(clipMu_);
-          lastClipSent_ = text;  // don't send it back
-        }
-        ui::SetClipboardText(text, [put](bool ok) { put->set_value(ok); });
-      }
-      g_app->input.Post(std::move(e));
+      if (n == 0 || n > kPasteMax) break;
+      PostPaste(std::string((const char*)p, n));
       break;
     }
     case msg::RELEASE_ALL: {

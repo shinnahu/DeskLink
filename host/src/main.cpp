@@ -147,6 +147,7 @@ static int AppMain(int argc, wchar_t** argv) {
   g_opt.testRouterIsLoopback = has(L"--router-is-loopback");
   g_opt.testNoScreen = has(L"--fake-no-screen");
   g_opt.testDropVirtualAt = _wtoi(val(L"--test-drop-virtual").c_str());
+  g_opt.testGuiThread = (DWORD)_wtoi(val(L"--test-gui-thread").c_str());
   if (!val(L"--upnp-url").empty()) remote::SetTestLocation(W2U(val(L"--upnp-url")));
 #endif
 

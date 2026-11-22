@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cwctype>
 
 #include "protocol.h"
 
@@ -76,7 +77,11 @@ void InputInjector::Run() {
       case InputEvent::Button: DoButton(ev.button, ev.down != 0); break;
       case InputEvent::Wheel: DoWheel(ev.dy, ev.dx); break;
       case InputEvent::Key: DoKey(ev.vk, ev.down != 0); break;
-      case InputEvent::Text: DoText(ev.text); break;
+      case InputEvent::Text:
+        // more than a character at once (a paste of one line, dictation) isn't picking a menu's item by its letter
+        if (ev.text.size() > 2 || (ev.text.size() == 2 && !IS_HIGH_SURROGATE(ev.text[0]))) CloseRightClickMenu();
+        DoText(ev.text);
+        break;
       case InputEvent::Paste: DoPaste(ev); break;
       case InputEvent::ReleaseAll: DoReleaseAll(); break;
       case InputEvent::Action: DoAction(ev.action); break;
@@ -166,6 +171,7 @@ void InputInjector::DoButton(int b, bool down) {
   }
   if (down) buttonsDown_.insert(b);
   else buttonsDown_.erase(b);
+  if (down) lastClickRight_ = b == 2;
   Send(&in, 1);
 }
 
@@ -265,6 +271,54 @@ void InputInjector::DoText(const std::wstring& s, bool pasted) {
   }
 }
 
+// The phone's rule (KeyInputView.pasted), less its look at the phone's clipboard: a line break inside the text, or words
+// and a line break at their end. A single word and its line break is typing: the word, and Enter.
+bool InputInjector::LooksPasted(const std::wstring& s) {
+  if (s.size() < 2) return false;
+  size_t end = s.size();
+  if (s[end - 1] == L'\n') {
+    end--;
+    if (s[end - 1] == L'\r') end--;
+  } else if (s[end - 1] == L'\r') {
+    end--;
+  }
+  bool space = false;
+  for (size_t i = 0; i < end; i++) {
+    wchar_t c = s[i];
+    if (c == L'\n' || c == L'\r') return true;
+    if (iswspace(c) && c != 0xA0 && c != 0x2007 && c != 0x202F) space = true;  // (no-break spaces join a word)
+  }
+  return space && end < s.size();
+}
+
+// An open right-click menu takes the keys: Ctrl+V does nothing in it, and typed text picks its items. Before text put in
+// at once that follows a right click, it's told to close (WM_CANCELMODE; not Esc, which does something in an app without
+// a menu). A menu is either one Windows says is open, or a window of its own that holds the mouse (Chrome's, Electron's).
+void InputInjector::CloseRightClickMenu() {
+  if (!lastClickRight_ || !buttonsDown_.empty()) return;
+  DWORD thread = 0;  // the one in front
+#ifdef DESKLINK_TESTING
+  if (g_opt.testNoInject) {  // the desktop is left alone, unless a test names the thread of its own window
+    if (!g_opt.testGuiThread) return;
+    thread = g_opt.testGuiThread;
+  }
+#endif
+  GUITHREADINFO g{};
+  g.cbSize = sizeof(g);
+  if (!GetGUIThreadInfo(thread, &g)) return;
+  HWND menu = nullptr;
+  if (g.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_SYSTEMMENUMODE))
+    menu = g.hwndMenuOwner ? g.hwndMenuOwner : g.hwndActive;
+  else if (g.hwndCapture && g.hwndCapture != g.hwndFocus && g.hwndCapture != g.hwndActive)
+    menu = g.hwndCapture;
+  if (!menu) return;
+  DWORD_PTR result = 0;
+  SendMessageTimeoutW(menu, WM_CANCELMODE, 0, 0, SMTO_ABORTIFHUNG, 300, &result);
+  Sleep(50);  // the app leaves the menu
+  lastClickRight_ = false;
+  Log("input: closed a right-click menu, for the text to go where the caret is");
+}
+
 // Text the phone's keyboard pasted. On the clipboard (the UI thread puts it there) it's pasted with Ctrl+V: all at
 // once and with its line breaks, as a paste on the PC would be. Otherwise it's typed, line breaks as Shift+Enter.
 void InputInjector::DoPaste(const InputEvent& ev) {
@@ -275,6 +329,7 @@ void InputInjector::DoPaste(const InputEvent& ev) {
     } catch (...) {  // the UI thread ended before it got to it
     }
   }
+  CloseRightClickMenu();
   Log("input: a paste of %zu characters, %s", ev.text.size(), onClipboard ? "with Ctrl+V" : "typed");
   if (!onClipboard) {
     DoText(ev.text, true);

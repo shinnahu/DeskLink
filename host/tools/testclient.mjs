@@ -268,6 +268,19 @@ async function main() {
     }
     const want = ['a down', 'a up', 'b down', 'b up', 'SHIFT down', 'RETURN down', 'RETURN up', 'SHIFT up', 'c down', 'c up', 'd down', 'd up'];
     ok(keys && keys.join() === want.join(), `PASTE typed without a clipboard: ${keys ? keys.join(', ') : 'NOT in the log'}`);
+
+    // 3f. TEXT with a line break inside (a phone before 2.13 pasting): taken as a paste, so no plain Enter (host 2.11)
+    const mark = fs.readFileSync(logPath, 'utf8').length;
+    send(c, 0x24, Buffer.from('ef\ngh', 'utf8'));
+    let added = [];
+    for (let i = 0; i < 30 && added.filter((l) => l.includes('input(test): key')).length < 12; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      added = fs.readFileSync(logPath, 'utf8').slice(mark).split(/\r?\n/);
+    }
+    const at = (vk, up) => added.findIndex((l) => l.includes(`key vk=0x${vk}`) && /flags=0x[0-9a-f]*([0-9a-f])/.test(l) &&
+      ((parseInt(/flags=0x([0-9a-f]+)/.exec(l)[1], 16) & 2) !== 0) === up);
+    ok(added.some((l) => l.includes('taken as a paste')) && at('10', false) >= 0 && at('10', false) < at('0d', false) &&
+      at('0d', true) < at('10', true), 'TEXT with a line break: taken as a paste, Shift held around its Enter');
   } else {
     console.log('      PASTE not sent (set HOST_NO_INJECT=1 and HOST_LOG for a host started with --no-inject)');
   }
