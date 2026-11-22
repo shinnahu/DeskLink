@@ -15,6 +15,10 @@ using std::min;
 #include <climits>
 #include <cmath>
 
+#ifndef WDA_EXCLUDEFROMCAPTURE
+#define WDA_EXCLUDEFROMCAPTURE 0x00000011  // (Windows 10 2004 and later; older SDK headers lack the name)
+#endif
+
 #include "app.h"
 #include "files.h"
 #include "protocol.h"
@@ -1058,6 +1062,15 @@ bool Init(bool withTray) {
 
   g_overlay = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"DeskLinkOverlay",
                               L"DeskLink", WS_POPUP, 0, 0, 10, 10, nullptr, nullptr, g_inst, nullptr);
+  // The pill is for the person at the PC only: Windows leaves it out of every picture taken of the screen (screen
+  // recorders such as OBS, screenshots, screen sharing, and the picture this host sends the phone), while it stays on
+  // the screen itself. Windows 10 2004 and later; on an older Windows the call fails and the pill shows in pictures.
+  if (g_overlay) {
+    BOOL hidden = SetWindowDisplayAffinity(g_overlay, WDA_EXCLUDEFROMCAPTURE);
+    DWORD now = 0;
+    Log("ui: overlay %s screen pictures", hidden && GetWindowDisplayAffinity(g_overlay, &now) && now == WDA_EXCLUDEFROMCAPTURE
+                                               ? "left out of" : "NOT left out of");
+  }
   g_withTray = withTray;
   if (withTray) AddTray();
   SetTimer(g_main, 1, 2000, nullptr);

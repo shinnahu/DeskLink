@@ -259,8 +259,9 @@ never shows a frozen screen as if it were live. When you leave the app the strea
 reconnects if needed. After 60 s in the background it disconnects.
 
 **On the PC**: a small **● Shared with Galaxy S23 [Stop]** pill sits in the bottom-right corner. It shows the phone's name,
-not your email; you can drag it anywhere, and **Stop** ends the session. The PC and its screen stay awake while a phone is
-connected.
+not your email; you can drag it anywhere, and **Stop** ends the session. It is only for whoever is at the PC: screen
+recordings (OBS and the like), screenshots, screen sharing and the phone's own picture of the PC leave it out (Windows 10
+2004 or later). The PC and its screen stay awake while a phone is connected.
 
 **With the PC's monitor off**: switching off a monitor on DisplayPort (and some on HDMI) looks to Windows as if it was
 unplugged. Windows keeps its screen on the desktop, with nothing behind it, and draws nothing to it, so there's no
