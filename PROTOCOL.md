@@ -234,13 +234,15 @@ Video rules
 | 0x21 | MOUSE_BUTTON | C→H | `u8 button(1 left 2 right 3 middle 4 back 5 forward) u8 down(1/0)` (at the last MOUSE_MOVE position) |
 | 0x22 | MOUSE_WHEEL | C→H | `i16 dy i16 dx` (120 = one notch; dy>0 = wheel up / away from user; dx>0 = right) |
 | 0x23 | KEY | C→H | `u16 windowsVirtualKey u8 down(1/0)` |
-| 0x24 | TEXT | C→H | `tail utf8` typed via Unicode injection (`\n`→Enter, `\t`→Tab, `\b`→Backspace) |
+| 0x24 | TEXT | C→H | `tail utf8` typed via Unicode injection (`\n`→Enter, `\t`→Tab, `\b`→Backspace). Host 2.11+ treats it as `PASTE` when it has a line break inside, or words and a line break at the end (clients before 2.13 sent pastes this way); a single word and its line break is still typed |
 | 0x25 | RELEASE_ALL | C→H | — releases every key/button the client holds |
 | 0x26 | ACTION | C→H | `u8 action` 1 CTRL_ALT_DEL, 2 LOCK_PC, 3 TASK_MANAGER |
 | 0x27 | MOUSE_REL | C→H | `i16 dx i16 dy` mouse counts, like a real mouse (games that read the mouse directly, e.g. a 3D camera, turn by them; a visible pointer moves by them with Windows' pointer speed). Only to hosts with capability `REL_MOUSE` |
 | 0x28 | PASTE | C→H | `tail utf8` (≤ 1 MiB) text the client's keyboard pasted, pasted at the PC's caret. With clipboard sync on, the host puts it on its clipboard (and doesn't send it back) and presses Ctrl+V once it's there; otherwise it types it, each line break as Shift+Enter. Either way it keeps its place among the input around it. Only to hosts with capability `PASTE` |
 
 * While Ctrl/Alt/Win is held (KEY down sent), the client sends letters/digits as `KEY` (VK `0x41..0x5A`, `0x30..0x39`) instead of `TEXT`, so shortcuts work.
+* Before text put in at once (a `PASTE`, or `TEXT` of more than one character) that follows a right click, host 2.11+
+  closes that click's menu. A `PASTE` within 0.5 s of another is typed, so the clipboard keeps the first one's text.
 * Pasted text doesn't go as `TEXT`: a line break in it would be Enter, which sends the message in a chat. To a host
   without `PASTE` the client sends it as `TEXT` line by line, with Shift+Enter (`KEY` 10 down, 0D down and up, 10 up)
   between the lines.

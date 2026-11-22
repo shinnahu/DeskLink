@@ -62,6 +62,8 @@ struct RuntimeOptions {
                                       // might) this many seconds in
   bool testPrivateClipboard = false;  // DESKLINK_TESTING: what DeskLink puts on the clipboard is marked private, so
                                       // clipboard history, the cloud clipboard and a running DeskLink leave it alone
+  DWORD testGuiThread = 0;            // DESKLINK_TESTING: with --no-inject, the thread of the test's own window, whose
+                                      // right-click menu may be closed before a paste
 };
 extern RuntimeOptions g_opt;
 

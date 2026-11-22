@@ -41,6 +41,8 @@ class InputInjector {
 
   // Pure helper used by the self-test: normalized absolute coordinates for a virtual-desktop pixel.
   static void ToAbsolute(int sx, int sy, LONG& dx, LONG& dy);
+  // Whether text that came to be typed (msg::TEXT) is a paste: phones before 2.13 send theirs that way.
+  static bool LooksPasted(const std::wstring& s);
 
  private:
   void Run();
@@ -51,6 +53,7 @@ class InputInjector {
   void DoKey(uint16_t vk, bool down);
   void DoText(const std::wstring& s, bool pasted = false);
   void DoPaste(const InputEvent& ev);
+  void CloseRightClickMenu();
   void DoReleaseAll();
   void DoAction(uint8_t a);
   void Send(INPUT* in, UINT n);
@@ -69,5 +72,6 @@ class InputInjector {
   // input thread only
   std::set<uint16_t> keysDown_;
   std::set<int> buttonsDown_;
+  bool lastClickRight_ = false;  // the phone's last click was a right click: its menu may be open
   DesktopFollower desk_;
 };

@@ -46,6 +46,7 @@ class Session : public StreamSink, public std::enable_shared_from_this<Session> 
   void ReaderLoop();
   void WriterLoop();
   void Handle(const Bytes& m);
+  void PostPaste(const std::string& text);
   void Cleanup();
 
   std::unique_ptr<SecureChannel> ch_;
@@ -62,6 +63,7 @@ class Session : public StreamSink, public std::enable_shared_from_this<Session> 
   std::unique_ptr<Streamer> streamer_;
   std::unique_ptr<AudioStreamer> audio_;
   bool audioWanted_ = false, streamPaused_ = false;  // (reader thread only)
+  uint64_t lastPasteMs_ = 0;                         // (reader thread only)
   uint64_t phoneLogMinute_ = 0;  // CLIENT_LOG lines written this minute, at most kPhoneLogPerMinute (reader thread)
   int phoneLogLines_ = 0;
   std::unique_ptr<FileReceiver> files_;

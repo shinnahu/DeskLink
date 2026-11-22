@@ -1,6 +1,8 @@
 package com.desklink.app;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.InputType;
 import android.view.KeyEvent;
 import android.view.View;
@@ -40,8 +42,22 @@ final class KeyInputView extends View {
         default int beforePaste() { return 0; }
     }
 
+    /**
+     * A keyboard may hand over one paste in several calls (a line, Enter, the next line): they come a few ms apart,
+     * sooner than a finger gets from one key to the next. Text that may begin a paste waits this long for what follows,
+     * and what came in that time is judged as one (see {@link #pasted}). Typing letter by letter never waits.
+     */
+    private static final int AT_ONCE_MS = 80;
+
     private Sink sink;
     private boolean predictive;
+
+    // not View.postDelayed: that waits for the view to be in a window
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final StringBuilder held = new StringBuilder(); // text put in at once, not sent yet
+    private String heldAfter = "";                          // the composing text before it that is on the PC already
+    private boolean enterHeld;                              // Enter's key-down went into held, so its key-up is dropped
+    private final Runnable heldDone = this::finishHeld;
 
     KeyInputView(Context c) {
         super(c);
@@ -69,6 +85,7 @@ final class KeyInputView extends View {
      * the word it is composing, otherwise its next correction would edit text at the wrong place.
      */
     void resetComposition() {
+        sendHeld(); // it was put in before the click or the key
         if (!predictive) return;
         RemoteInputConnection ic = current;
         if (ic != null) ic.forget();
@@ -133,12 +150,85 @@ final class KeyInputView extends View {
 
     /** Text from keys (not from the keyboard's text calls): typed (or pasted), and remembered as text before the caret. */
     private void typeKeys(String s) {
-        boolean paste = pasted(s, s, sink);
-        if (paste) sink.pasteText(s);
-        else sink.typeText(s);
         RemoteInputConnection ic = current;
         if (ic != null) ic.typedByKey(s);
-        if (paste && hasLineBreak(s)) resetComposition(); // the keyboard starts over on the new line, as after Enter
+        if (put(s, s, false, true)) resetComposition(); // the keyboard starts over on the new line, as after Enter
+    }
+
+    // ------------------------------------------------------------------ text put in at once
+
+    /**
+     * Text the keyboard put at the caret. added: what's new; committed: all it committed (see {@link #pasted}).
+     * replaces: it corrects text on the PC; whole: committed at once, not composed. What may begin a paste is held for
+     * a moment (see {@link #AT_ONCE_MS}), and so is whatever comes while something is held. Returns true if lines were
+     * pasted.
+     */
+    private boolean put(String added, String committed, boolean replaces, boolean whole) {
+        if (added.isEmpty()) return false;
+        if (held.length() == 0) {
+            if (!mayBeginPaste(added, replaces, whole)) return send(added, committed);
+            heldAfter = committed.substring(0, committed.length() - added.length());
+        }
+        hold(added);
+        return false;
+    }
+
+    /**
+     * Two characters or more at once that hold a line break, or that are new text (not a correction) of several words
+     * or committed whole. Letters, a space and Enter by itself never do, so they go out at once.
+     */
+    private static boolean mayBeginPaste(String added, boolean replaces, boolean whole) {
+        if (added.codePointCount(0, added.length()) < 2) return false;
+        String words = added.trim();
+        if (words.isEmpty()) return false;
+        return hasLineBreak(added) || !replaces && (whole || hasWhitespace(words));
+    }
+
+    private void hold(String added) {
+        held.append(added);
+        handler.removeCallbacks(heldDone);
+        handler.postDelayed(heldDone, AT_ONCE_MS);
+    }
+
+    /** An Enter that came right behind held text is a line break in it. */
+    private void holdLineBreak() {
+        hold("\n");
+        RemoteInputConnection ic = current;
+        if (ic != null) ic.typedByKey("\n");
+    }
+
+    /** Backspaces eat held text first; returns how many are left for the PC. */
+    private int takeBack(int presses) {
+        while (presses > 0 && held.length() > 0) {
+            held.setLength(held.offsetByCodePoints(held.length(), -1));
+            presses--;
+        }
+        return presses;
+    }
+
+    /** Sends what is held; returns true if it had a line break. */
+    private boolean sendHeld() {
+        handler.removeCallbacks(heldDone);
+        if (held.length() == 0) return false;
+        String added = held.toString(), committed = heldAfter + added;
+        held.setLength(0);
+        heldAfter = "";
+        send(added, committed);
+        return hasLineBreak(added);
+    }
+
+    private void finishHeld() {
+        if (sendHeld()) resetComposition(); // the keyboard starts over on the new line, as after Enter
+    }
+
+    private boolean send(String added, String committed) {
+        if (sink == null) return false;
+        if (pasted(added, committed, sink)) {
+            sink.pasteText(added);
+            return hasLineBreak(added);
+        }
+        sink.typeText(added);
+        return false;
     }
 
     /**
@@ -183,6 +273,18 @@ final class KeyInputView extends View {
         int vk = keycodeToVk(kc);
         boolean special = isSpecial(kc);
         boolean hwModifiers = e.isCtrlPressed() || e.isAltPressed() || e.isMetaPressed();
+        if (kc == KeyEvent.KEYCODE_ENTER || kc == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+            if (down) {
+                enterHeld = held.length() > 0 && !hwModifiers && !sink.modifiersActive();
+                if (enterHeld) {
+                    holdLineBreak();
+                    return true;
+                }
+            } else if (enterHeld) {
+                enterHeld = false;
+                return true;
+            }
+        }
         // a shortcut (Ctrl+V, Ctrl+Backspace...) changes the PC's text in ways the keyboard can't follow
         if (down && (movesCaret(kc) || hwModifiers || sink.modifiersActive())) resetComposition();
         if (!special && !hwModifiers && !sink.modifiersActive()) {
@@ -193,6 +295,8 @@ final class KeyInputView extends View {
             }
         }
         if (vk != 0) {
+            // what's held goes before the key (Shift alone doesn't end it: it may be for the next character's capital)
+            if (down && kc != KeyEvent.KEYCODE_SHIFT_LEFT && kc != KeyEvent.KEYCODE_SHIFT_RIGHT) finishHeld();
             sink.keyEvent(vk, down);
             RemoteInputConnection ic = current;
             if (down && vk == Vk.BACK && ic != null) ic.backspacedByKey();
@@ -306,9 +410,11 @@ final class KeyInputView extends View {
 
         /**
          * Makes the composing text (or, with none, new text at the caret) newText: only the keystrokes that differ. A
-         * paste goes as one. Returns true if what it put in was pasted with a line break in it.
+         * paste goes as one (see put). commit: committed, not composed. Returns true if what it put in was pasted
+         * with a line break in it.
          */
-        private boolean replaceComposing(String newText) {
+        private boolean replaceComposing(String newText, boolean commit) {
+            boolean whole = commit && composeStart < 0;
             int from = composeStart >= 0 ? composeStart : text.length();
             String old = text.substring(from);
             Sink s = sink();
@@ -319,14 +425,8 @@ final class KeyInputView extends View {
                 while (p < max && old.charAt(p) == newText.charAt(p)) p++;
                 if (p > 0 && p < old.length() && Character.isLowSurrogate(old.charAt(p))) p--; // don't split a pair
                 int remove = old.codePointCount(p, old.length());
-                for (int i = 0; i < remove; i++) s.keyTap(Vk.BACK);
-                String add = newText.substring(p);
-                if (pasted(add, newText, s)) {
-                    s.pasteText(add);
-                    pastedLines = hasLineBreak(add);
-                } else if (!add.isEmpty()) {
-                    s.typeText(add);
-                }
+                for (int i = owner.takeBack(remove); i > 0; i--) s.keyTap(Vk.BACK);
+                pastedLines = owner.put(newText.substring(p), newText, remove > 0, whole);
             }
             text.setLength(from);
             text.append(newText);
@@ -346,7 +446,7 @@ final class KeyInputView extends View {
 
         @Override
         public boolean commitText(CharSequence t, int newCursorPosition) {
-            boolean pastedLines = replaceComposing(t == null ? "" : t.toString());
+            boolean pastedLines = replaceComposing(t == null ? "" : t.toString(), true);
             composeStart = -1;
             trim();
             if (pastedLines) owner.resetComposition(); // the keyboard starts over on the new line, as after Enter
@@ -357,7 +457,7 @@ final class KeyInputView extends View {
         public boolean setComposingText(CharSequence t, int newCursorPosition) {
             String s = t == null ? "" : t.toString();
             int from = composeStart >= 0 ? composeStart : text.length();
-            boolean pastedLines = replaceComposing(s);
+            boolean pastedLines = replaceComposing(s, false);
             composeStart = s.isEmpty() ? -1 : from;
             trim();
             if (pastedLines) owner.resetComposition();
@@ -404,7 +504,8 @@ final class KeyInputView extends View {
         private void deleteBefore(int known, int older, int presses, int afterLength) {
             Sink s = sink();
             if (s != null) {
-                for (int i = 0; i < presses; i++) s.keyTap(Vk.BACK);
+                for (int i = owner.takeBack(presses); i > 0; i--) s.keyTap(Vk.BACK);
+                if (afterLength > 0) owner.sendHeld();
                 for (int i = 0; i < afterLength; i++) s.keyTap(Vk.DELETE);
             }
             text.setLength(text.length() - known);
@@ -437,6 +538,10 @@ final class KeyInputView extends View {
         @Override
         public boolean performEditorAction(int actionCode) {
             Sink s = sink();
+            if (owner.held.length() > 0) {
+                owner.holdLineBreak();
+                return true;
+            }
             if (s != null) s.keyTap(Vk.RETURN);
             owner.resetComposition(); // as with the Enter key
             return true;
@@ -452,6 +557,7 @@ final class KeyInputView extends View {
             else if (id == android.R.id.copy) key = Vk.C;
             else if (id == android.R.id.paste) key = Vk.V;
             else return false;
+            owner.finishHeld();
             final int k = key;
             Runnable send = () -> {
                 s.keyEvent(Vk.CONTROL, true);

@@ -495,6 +495,19 @@ int RunPasteSelfTest() {
   Sleep(400);
   check("typed text", {"'c' down", "'c' up", "RETURN down", "RETURN up"});
 
+  // 4. which typed text is a paste (phones before 2.13 send theirs as text)
+  const struct {
+    const wchar_t* text;
+    bool paste;
+  } rule[] = {{L"two words\n", true}, {L"one\ntwo", true},  {L"one\r\ntwo", true}, {L"\n\n", true},
+              {L"word\n", false},     {L"word\r\n", false}, {L"\n", false},        {L"\r\n", false},
+              {L"two words", false},  {L"x", false},        {L"no\u00A0break\n", false}};
+  for (size_t i = 0; i < sizeof(rule) / sizeof(rule[0]); i++) {
+    if (InputInjector::LooksPasted(rule[i].text) == rule[i].paste) continue;
+    Log("pastetest: text %zu should %sbe a paste: MISMATCH", i, rule[i].paste ? "" : "not ");
+    fails++;
+  }
+
   inj.Stop();
   if (was == Clip::Text) {
     auto back = PutOnClipboard(saved);
