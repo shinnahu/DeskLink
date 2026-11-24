@@ -17,8 +17,8 @@ android {
         applicationId "com.desklink.app"
         minSdk 26
         targetSdk 35
-        versionCode 31
-        versionName "2.15"
+        versionCode 32
+        versionName "2.16"
     }
 
     signingConfigs {
@@ -59,6 +59,10 @@ android {
             all {
                 // PreviewShots draws the README's phone pictures, only when asked: -Ppreviews=<folder>
                 it.systemProperty 'desklink.previews', (project.findProperty('previews') ?: '')
+                // SendClipboardLiveTest talks to a real DeskLink on a PC, only when asked: -Phost=<address:port>
+                // -Pstation=<StationRun.exe> (see host/README.md)
+                it.systemProperty 'desklink.host', (project.findProperty('host') ?: '')
+                it.systemProperty 'desklink.station', (project.findProperty('station') ?: '')
                 it.maxHeapSize = '2g'
             }
         }

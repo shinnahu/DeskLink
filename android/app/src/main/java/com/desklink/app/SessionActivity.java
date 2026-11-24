@@ -1814,8 +1814,8 @@ public final class SessionActivity extends Activity implements HostConnection.Li
                 ClipDescription d = clipboard.getPrimaryClipDescription();
                 if (d == null) return null;
                 PersistableBundle x = d.getExtras();
-                boolean sendable = d.hasMimeType("text/*") && (x == null || !x.getBoolean(EXTRA_IS_SENSITIVE));
-                return new ClipSync.Info(d.getLabel(), sendable, d.getTimestamp());
+                boolean markedPrivate = x != null && x.getBoolean(EXTRA_IS_SENSITIVE);
+                return new ClipSync.Info(d.getLabel(), d.hasMimeType("text/*"), markedPrivate, d.getTimestamp());
             }
 
             @Override
@@ -1861,6 +1861,27 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     @Override
     public int beforePaste() {
         return isLive() && checkClipboard() ? PASTE_DELAY_MS : 0;
+    }
+
+    /**
+     * ⋮ → Send clipboard: the text on the phone's clipboard goes to the PC's clipboard now, whether or not it went
+     * before, and with Sync clipboard off too (ClipSync.send; the PC's own clipboard, should it send it meanwhile, is
+     * dropped here as always with the sync off).
+     */
+    private void sendClipboard() {
+        final HostConnection c = session == null ? null : session.connection();
+        if (c == null) {
+            showSnack(getString(R.string.files_not_connected), -1, null, null, 2500);
+            return;
+        }
+        boolean sent = clipSync != null && clipSync.send(new ClipSync.Pc() {
+            @Override
+            public void send(String text) { c.sendClipboard(text); }
+
+            @Override
+            public void share(boolean on) { c.setOptions(on, soundWanted()); } // every option at once
+        }, prefs.clipboardSync());
+        showSnack(getString(sent ? R.string.clip_sent : R.string.clip_no_text), -1, null, null, 3000);
     }
 
     // =================================================================== files
@@ -1987,7 +2008,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
 
     // =================================================================== menu
 
-    /** ⋮: files, things to do on the PC, Settings, Disconnect (DeskLink's own menu, not Android's pop-up). */
+    /** ⋮: files, the clipboard, things to do on the PC, Settings, Disconnect (DeskLink's own menu, not Android's pop-up). */
     private void showMenu(View anchor) {
         final Sheet s = new Sheet(this, Sheet.BOTTOM);
         s.title(hostName, null);
@@ -1999,6 +2020,12 @@ public final class SessionActivity extends Activity implements HostConnection.Li
             s.row(R.drawable.ic_download, getString(R.string.tb_get), null, false, Sheet.NORMAL, v -> {
                 s.dismiss();
                 requestFileFromPc();
+            });
+        }
+        if (hostInfo == null || hostInfo.can(Protocol.CAP_CLIPBOARD)) {
+            s.row(R.drawable.ic_clipboard_send, getString(R.string.menu_send_clipboard), null, false, Sheet.NORMAL, v -> {
+                s.dismiss();
+                sendClipboard();
             });
         }
         if (hostInfo != null && hostInfo.monitors.size() > 1) {

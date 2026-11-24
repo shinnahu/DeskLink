@@ -5,7 +5,7 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 | part | file | size |
 |---|---|---|
 | Windows host (your PC) | `dist/DeskLinkHost.exe` | 723 KB (version 2.11), no install required to try |
-| Android app (your phone) | `dist/DeskLink.apk` | 195 KB (version 2.15) |
+| Android app (your phone) | `dist/DeskLink.apk` | 197 KB (version 2.16) |
 
 On GitHub, both files are attached to the latest release (*Releases*, on the right of the repository page) rather than
 kept in the code; older releases are removed.
@@ -17,7 +17,7 @@ stand-in.
 
 | Your PCs | Connected | The ⋮ menu |
 |---|---|---|
-| <img src="docs/phone-pcs.png" alt="The list of PCs, with OFFICE-PC online" width="240"> | <img src="docs/phone-session.png" alt="Connected: the PC's screen with the pointer, the top bar (with the screenshot camera) and the shortcut bar" width="240"> | <img src="docs/phone-menu.png" alt="The ⋮ menu: send and get files, screen, Ctrl+Alt+Del, lock, Task Manager, Settings, Disconnect" width="240"> |
+| <img src="docs/phone-pcs.png" alt="The list of PCs, with OFFICE-PC online" width="240"> | <img src="docs/phone-session.png" alt="Connected: the PC's screen with the pointer, the top bar (with the screenshot camera) and the shortcut bar" width="240"> | <img src="docs/phone-menu.png" alt="The ⋮ menu: send and get files, send the clipboard, screen, Ctrl+Alt+Del, lock, Task Manager, Settings, Disconnect" width="240"> |
 
 | All screens at once | Gaming mode |
 |---|---|
@@ -169,8 +169,8 @@ needs DeskLink 2.8 on the PC; with an older one the camera doesn't show.
 A short note at the bottom says which screen is showing (*Screen 2 of 2*, counting from the left). Notes like it, and
 the ones after switching the touch mode or turning the shortcut bar on or off (*Shortcut bar shown*), can be turned off
 in Settings → Picture → *Short notes* (on by default). Messages about files and from the PC still show. The ⋮ menu has
-*Send files to PC*, *Get file from PC*, *Screen* (all of them or one, with several monitors), *Ctrl+Alt+Del*, *Lock PC*,
-*Task Manager*, *Settings* and *Disconnect*. The bar stays on screen, and the picture sits below it rather than under
+*Send files to PC*, *Get file from PC*, *Send clipboard*, *Screen* (all of them or one, with several monitors),
+*Ctrl+Alt+Del*, *Lock PC*, *Task Manager*, *Settings* and *Disconnect*. The bar stays on screen, and the picture sits below it rather than under
 it. Hide it with **˄**; the
 **˅** at the top of the screen brings it back. DeskLink remembers which you chose. While connecting or reconnecting it's
 always shown.
@@ -247,7 +247,12 @@ wins:
 * When DeskLink connects, the phone gets the PC's clipboard, unless you copied something on the phone since DeskLink
   last looked. Then the phone's copy goes to the PC instead.
 
-Text that password managers mark as private is never sent.
+Text that password managers mark as private is never sent by itself.
+
+⋮ → **Send clipboard** (2.16) sends the text on the phone's clipboard to the PC's clipboard when you tap it, whatever
+went before: a copy that was sent already, text that came from the PC, text marked private, and with *Sync clipboard*
+off too. A note says *Sent to the PC's clipboard*; paste on the PC as usual. With no text on the phone's clipboard
+(nothing, or a picture) nothing is sent, and the note says so.
 
 **Files**
 * ⋮ → **Send files to PC**: pick files. They are saved on the PC in `Downloads\DeskLink` and a notification appears.
@@ -525,6 +530,18 @@ apps) and the waiting screen's *Trying another one…*. Sound failures go to the
 screen no longer mentions IPv6. Instead of asking for the app to be closed, the phone tries a faster decoder again by
 itself (see *If the picture doesn't come*). Checked with unit tests (3 new: how long a decoder rests, when the session
 switches back, the 2 s it then has). Not yet tried on the phone.
+Version 2.16 (phone) adds ⋮ → *Send clipboard*: the text on the phone's clipboard goes to the PC's clipboard when it's
+tapped, whatever the sync did with it. The PC is unchanged. It takes a clipboard only while the two are shared (the
+same code since the first version kept here, PC 2.3), so with *Sync clipboard* off the phone turns the sharing on for
+that one message and off again. Checked with unit tests (11 new) and with the app's session screen, run on this PC
+with Robolectric, sending to a test build of the PC's current code over 127.0.0.1. That PC ran in a window station of
+its own (`host/tools/StationRun.cs`), which gives it a clipboard apart from this desktop's; the test read and changed
+that clipboard. With the sync off, a copy on the phone stayed there, and the PC left a clipboard sent to it as it was;
+the button sent it, the PC's clipboard then held it with Windows' line breaks, and a copy made on the PC afterwards
+didn't come to the phone. With the sync on,
+the button sent again a copy the PC no longer held, and text that had come from the PC. A copy marked private went
+only with the button. With nothing on the phone's clipboard nothing was sent, and the note said so. Not yet tried on
+the phone.
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del);
@@ -544,6 +561,8 @@ Not yet verified:
   first; closing a menu with the installed service, and menus Windows doesn't report (Windows 11's File Explorer, say).
 * 2.15 on the phone: going back to the faster decoder by itself, in the middle of a session and when coming back to
   the app.
+* 2.16 on the phone: ⋮ → *Send clipboard* with *Sync clipboard* on and off, to the installed PC; its note next to the
+  message Android 12 and later may show when an app reads the clipboard.
 
 ## Build from source
 

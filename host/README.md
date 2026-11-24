@@ -115,6 +115,18 @@ node tools\testclient.mjs 127.0.0.1 47910 %TEMP%\work                :: 24 end-t
 
 `--data` keeps test identities, logs and received files out of the real profile.
 
+A check that needs the test host's clipboard runs it in a window station of its own, which has a clipboard apart from
+the desktop's and shows nothing on screen (`tools\StationRun.cs`; the capture gets no picture there, the log says
+`DuplicateOutput failed`, everything else works):
+
+```bat
+%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /out:build\StationRun.exe tools\StationRun.cs
+:: stays until the host ends (end it with taskkill, or give it --exit-after <seconds>)
+build\StationRun.exe wait - build\DeskLinkHostTest.exe --data %TEMP%\dl --bind 127.0.0.1 --port 47910 --auto-approve --no-inject
+:: meanwhile, from android\: the phone app's session screen sends its clipboard to that host (4 checks)
+gradlew :app:testDebugUnitTest --tests com.desklink.app.SendClipboardLiveTest -Phost=127.0.0.1:47910 -Pstation=<full path of StationRun.exe>
+```
+
 Mobile data, still only on 127.0.0.1 (test builds never look for the real router):
 
 ```bat

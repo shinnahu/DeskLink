@@ -37,6 +37,18 @@ put stand-in pictures of its screen (`desk-one.png` 1920×1080, `desk-all.png` 3
 
 Without `-Ppreviews` the test is skipped.
 
+## The session screen against a real host
+
+`app/src/test/.../SendClipboardLiveTest.java` runs the session screen (Robolectric again) connected to a test build of
+the Windows host, taps ⋮ → *Send clipboard*, and looks at that host's clipboard. The host runs in a window station of
+its own, so the clipboard is not the desktop's (see [host/README.md](../host/README.md) for starting it):
+
+```bash
+./gradlew :app:testDebugUnitTest --tests com.desklink.app.SendClipboardLiveTest -Phost=127.0.0.1:47910 -Pstation=<full path of StationRun.exe>
+```
+
+Without `-Phost` and `-Pstation` the test is skipped.
+
 ## Desktop CLI (integration tests against the host)
 
 ```bash

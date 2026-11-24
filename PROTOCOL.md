@@ -251,12 +251,17 @@ Video rules
   END 23, HOME 24, LEFT 25, UP 26, RIGHT 27, DOWN 28, SNAPSHOT 2C, INSERT 2D, DELETE 2E, LWIN 5B, APPS 5D, F1..F12 70..7B.
 
 ### Clipboard
-| 0x30 | CLIPBOARD | C↔H | `tail utf8` (≤ 1 MiB). Only sent while clipboard sync is on. |
+| 0x30 | CLIPBOARD | C↔H | `tail utf8` (≤ 1 MiB). The host sends it, and takes it, only while clipboard sync is on. |
 |---|---|---|---|
 
 The host sends its clipboard when STREAM_START (or SET_OPTIONS turning sync on) arrives, and then whenever it changes;
 it skips text equal to what the client last sent. A client holding a newer copy of its own sends CLIPBOARD *before*
 STREAM_START: the host applies it first, so it does not send its older clipboard back.
+
+A clipboard the user sends by hand (the client's *Send clipboard*, 2.16) is a CLIPBOARD like any other. With the sync
+off the client sends SET_OPTIONS with the sync on, the CLIPBOARD, and SET_OPTIONS with the sync off again: the host
+takes that one clipboard. Turning the sync on may make the host send its own clipboard; a client whose sync is off
+drops it, as it drops any CLIPBOARD from the host.
 
 ### Files (either direction; client-created ids are odd, host-created ids are even)
 | type | name | dir | payload |

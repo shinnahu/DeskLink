@@ -10,6 +10,7 @@ package com.desklink.app;
  * after the phone clipboard has been looked at, and only if the phone has no newer copy of its own. It used to
  * replace a copy just made on the phone before the phone could send it.</li>
  * </ul>
+ * The Send clipboard button ({@link #send}) is outside those rules: what the phone holds goes to the PC when asked.
  * Plain Java (the Android clipboard is behind {@link Phone}) so these rules can be checked off the phone.
  */
 final class ClipSync {
@@ -21,12 +22,14 @@ final class ClipSync {
     /** The phone clipboard's description. Unlike reading the clip, reading this doesn't show Android's "pasted" notice. */
     static final class Info {
         final CharSequence label;
+        final boolean text;     // it holds text
         final boolean sendable; // text, and not marked private by a password manager
         final long stamp;       // when it was copied (ClipDescription.getTimestamp()); 0 = this phone doesn't say
 
-        Info(CharSequence label, boolean sendable, long stamp) {
+        Info(CharSequence label, boolean text, boolean markedPrivate, long stamp) {
             this.label = label;
-            this.sendable = sendable;
+            this.text = text;
+            this.sendable = text && !markedPrivate;
             this.stamp = stamp;
         }
     }
@@ -56,6 +59,9 @@ final class ClipSync {
 
     interface Pc {
         void send(String text);
+
+        /** Tells the PC whether the two clipboards are shared (the Sync clipboard setting, on the PC's side). */
+        default void share(boolean on) {}
     }
 
     private final Phone phone;
@@ -99,6 +105,34 @@ final class ClipSync {
             if (copy == null && h != null) apply(h); // nothing new on the phone: take the PC's
         }
         return sent;
+    }
+
+    /**
+     * The Send clipboard button: the text the phone clipboard holds goes to the PC now, whatever the sync did with
+     * it. A copy that went already goes again, and so do text that came from the PC and text a password manager
+     * marked private (the sync leaves that one out; here it was asked for). shared: Sync clipboard is on. A PC takes
+     * a clipboard only while the two are shared, so with the sync off they're shared for this one message and no
+     * longer. Returns false, with nothing sent, when the clipboard holds no text or can't be read.
+     */
+    boolean send(Pc pc, boolean shared) {
+        String s;
+        try {
+            Info d = phone.info();
+            if (d == null || !d.text) return false;
+            s = phone.text();
+            if (s.isEmpty()) return false;
+            // looked at: the sync doesn't send it a second time
+            if (!isOurs(d)) seen.set(d.stamp, d.stamp != 0 ? 0 : normalize(s).hashCode());
+        } catch (RuntimeException e) {
+            return false; // not allowed right now
+        }
+        if (!shared) pc.share(true);
+        pc.send(s);
+        if (!shared) pc.share(false);
+        lastSent = known = normalize(s);
+        checked = true; // a clipboard the PC sent before this one is the older of the two
+        held = null;
+        return true;
     }
 
     /** The PC's clipboard arrived. */
