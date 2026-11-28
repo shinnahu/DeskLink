@@ -38,7 +38,6 @@ import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.desklink.core.HostConnection;
 import com.desklink.core.Messages;
@@ -60,7 +59,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** The remote desktop screen. */
 public final class SessionActivity extends Activity implements HostConnection.Listener, RemoteSession.StateListener,
         TouchInput.Sink, KeyInputView.Sink, ShortcutBar.Sink, VideoDecoder.Callback, TextureView.SurfaceTextureListener,
-        GamepadControls.Sink, GamepadEditor.Listener, SettingsScreen.Host {
+        GamepadControls.Sink, GamepadEditor.Listener, SettingsScreen.Host, SessionService.Owner {
 
     static final String EXTRA_HOST_ID = "hostId";
     private static final int REQ_PICK = 41;
@@ -110,6 +109,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     private VideoSurface videoSurface;   // the TextureView's surface (null until it has one)
     private VideoSurface decoderSurface; // the surface the decoder draws on
     private boolean started;             // between onStart and onStop: the decoder may run
+    private boolean soundInBackground;   // Settings → Stay connected: the PC's sound plays on while in the background
     private boolean waitingForSurface;   // the next decoder waits for the last one to let go of the surface
     private long decoderStartedAt;       // when the decoder in use was made (elapsedRealtime)
     // the surfaces' bookkeeping outlives onDestroy (which clears `main`): a codec lets go of its surface after that
@@ -220,6 +220,8 @@ public final class SessionActivity extends Activity implements HostConnection.Li
     protected void onStart() {
         super.onStart();
         started = true;
+        SessionService.end(this); // in front again: nothing more to keep alive
+        soundInBackground = false;
         startDecoder(); // released in onStop; the TextureView keeps its surface
         if (session != null) session.onForeground();
         if (clipboard != null) clipboard.addPrimaryClipChangedListener(clipListener);
@@ -232,17 +234,31 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         super.onStop();
         main.removeCallbacks(statsTick);
         if (clipboard != null) clipboard.removePrimaryClipChangedListener(clipListener);
+        soundInBackground = false;
         if (session != null && !isFinishing()) {
             touch.reset();              // releases a drag in progress
             shortcutBar.releaseAll();   // key-ups for latched/held modifiers go out first
             pad.releaseAll();           // ...and for gamepad buttons being held
-            session.onBackground();     // then RELEASE_ALL + STREAM_PAUSE
+            // Settings → Stay connected: the connection stays, kept alive by SessionService, and the PC's sound
+            // plays on where the PC can go on sending it without the picture
+            boolean stay = prefs.stayConnected() && state != RemoteSession.State.ENDED
+                    && state != RemoteSession.State.FAILED && SessionService.begin(this, this, hostId, hostName);
+            Messages.HostInfo i = hostInfo;
+            soundInBackground = stay && soundWanted() && i != null && i.can(Protocol.CAP_SOUND_PAUSED);
+            session.onBackground(stay, soundInBackground); // then RELEASE_ALL + STREAM_PAUSE
         }
         started = false;
         waitingForSurface = false;
         surfaceHandler.removeCallbacks(surfaceTimeout);
         stopDecoder();
-        audio.stop(); // the PC stops its sound with the stream, and says its format again when it resumes
+        // the PC stops its sound with the stream, and says its format again when it resumes
+        if (!soundInBackground) audio.stop();
+    }
+
+    /** Disconnect, tapped in the notification that keeps the session alive in the background. */
+    @Override
+    public void disconnectFromNotification() {
+        main.post(this::finishSession);
     }
 
     @Override
@@ -251,6 +267,7 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         main.removeCallbacksAndMessages(null);
         if (touch != null) touch.reset(); // stops a pointer glide
         if (session != null) session.stop();
+        SessionService.end(this);
         stopDecoder();
         audio.stop();
         if (Build.VERSION.SDK_INT >= 33 && backCallback != null) {
@@ -1726,6 +1743,16 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         labelsChanged = false;
     }
 
+    /** Settings → Back up photos and videos, opened here: to this PC. */
+    @Override
+    public String sessionHostId() { return hostId; }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        BackupStart.onPermissions(this, requestCode);
+    }
+
     /** A setting changed in Settings (already saved): apply it to this session now. */
     @Override
     public void settingChanged(int key) {
@@ -1974,6 +2001,11 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         showSnack(getString(R.string.files_pick_on_pc), -1, null, null, 6000);
     }
 
+    /**
+     * Open, on a file from the PC: the app the phone has for its type. An APK goes to Android's installer (the
+     * manifest's REQUEST_INSTALL_PACKAGES: without it the installer closes at once, saying nothing; the first time
+     * Android asks to allow installing from DeskLink).
+     */
     private void openFile(FileSaver.Target t) {
         if (t.uri == null) return;
         Intent i = new Intent(Intent.ACTION_VIEW);
@@ -1981,8 +2013,8 @@ public final class SessionActivity extends Activity implements HostConnection.Li
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             startActivity(i);
-        } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, t.name, Toast.LENGTH_SHORT).show();
+        } catch (ActivityNotFoundException | SecurityException e) {
+            showSnack(getString(R.string.files_no_app, t.name), -1, null, null, 5000);
         }
     }
 

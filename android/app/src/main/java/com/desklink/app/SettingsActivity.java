@@ -26,6 +26,12 @@ public final class SettingsActivity extends Activity implements SettingsScreen.H
         finish();
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        BackupStart.onPermissions(this, requestCode); // Back up photos and videos
+    }
+
     @SuppressWarnings("deprecation")
     @Override
     public void onBackPressed() {

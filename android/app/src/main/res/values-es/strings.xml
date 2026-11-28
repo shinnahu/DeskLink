@@ -108,7 +108,7 @@
     <string name="menu_predictive">Texto predictivo</string>
     <string name="menu_stats">Mostrar estadísticas</string>
     <string name="menu_help">Gestos</string>
-    <string name="help_text">Modo panel táctil\n• Arrastrá un dedo: mover el puntero\n• Soltá mientras lo movés: el puntero sigue deslizándose (tocá para frenarlo)\n• Tocar: clic · Doble toque: doble clic\n• Tocar con dos dedos: clic derecho\n• Tocar con tres dedos: clic del medio\n• Deslizar con dos dedos: desplazar (si soltás en movimiento, sigue desplazándose; tocá para frenarlo)\n• Mantener presionado y arrastrar: arrastrar (o doble toque y arrastrar). Un círculo en el puntero muestra cuándo tomó. Para seguir más lejos, apoyá otro dedo y levantá el primero\n• Pellizcar: zoom\n• Deslizar hacia arriba / abajo con tres dedos: mostrar / ocultar el teclado\n\nModo toque directo\n• Tocar: clic donde tocás\n• Mantener presionado: clic derecho\n• Arrastrar un dedo: arrastrar\n• Dos dedos: desplazar · Pellizcar: zoom\n\nBarra de atajos (sobre el teclado)\n• Editar, Ctrl Alt, Esc Tab, ← ↑ ↓ →: tocá para ver esas teclas, tocá de nuevo para ocultarlas\n• Ctrl, Shift, Alt: tocar = queda presionada hasta que la tocás de nuevo; mantener presionado = presionada mientras la mantenés (Configuración → Teclado puede hacer que solo funcionen mientras las mantenés)\n• Win: un toque es una pulsación (abre Inicio); mantener presionado = presionada mientras la mantenés (Win + una tecla)\n\nBotones abajo a la derecha\n• Teclado: mostrar / ocultar el teclado del teléfono\n• Teclas de atajo: dejar fija la barra de atajos (tocá de nuevo para ocultarla)\n\nBarra de arriba\n• Queda fija hasta que la ocultás con ˄; la ˅ de arriba la vuelve a mostrar\n• El botón de modo cambia entre panel táctil → toque directo → modo juego; mantenelo presionado para elegir uno, o un perfil de juego\n• Con más de una pantalla en la PC: el botón de dos pantallas las muestra todas juntas (pellizcá para ver de cerca; tocalo de nuevo para volver a una), el de la pantalla con flecha pasa a la siguiente\n• ⋮: enviar archivos a la PC o traer uno, enviar el portapapeles del teléfono, elegir pantalla, Ctrl+Alt+Del, bloquear la PC, Administrador de tareas\n\nModo juego\n• Un control en pantalla: mantener un botón mantiene su tecla o botón del mouse en la PC\n• El stick (DualShock) gira suave; Configuración → Tipo de control → Digital pone la cruceta\n• Arrastrá entre los botones para mover el puntero; en un juego que oculta el puntero, gira la cámara\n• Cada perfil tiene su nombre y sus botones: Configuración → Perfiles…\n\nConfiguración (⋮ → Configuración): velocidad del puntero, teclado, modo juego, imagen, portapapeles</string>
+    <string name="help_text">Modo panel táctil\n• Arrastrá un dedo: mover el puntero\n• Soltá mientras lo movés: el puntero sigue deslizándose (tocá para frenarlo)\n• Tocar: clic · Doble toque: doble clic\n• Tocar con dos dedos: clic derecho\n• Tocar con tres dedos: clic del medio\n• Deslizar con dos dedos: desplazar (si soltás en movimiento, sigue desplazándose; tocá para frenarlo)\n• Mantener presionado y arrastrar: arrastrar (o doble toque y arrastrar). Un círculo en el puntero muestra cuándo tomó. Para seguir más lejos, apoyá otro dedo y levantá el primero\n• Pellizcar: zoom\n• Deslizar hacia arriba / abajo con tres dedos: mostrar / ocultar el teclado\n\nModo toque directo\n• Tocar: clic donde tocás\n• Mantener presionado: clic derecho\n• Arrastrar un dedo: arrastrar\n• Dos dedos: desplazar · Pellizcar: zoom\n\nBarra de atajos (sobre el teclado)\n• Editar, Ctrl Alt, Esc Tab, ← ↑ ↓ →: tocá para ver esas teclas, tocá de nuevo para ocultarlas\n• Ctrl, Shift, Alt: tocar = queda presionada hasta que la tocás de nuevo; mantener presionado = presionada mientras la mantenés (Configuración → Teclado puede hacer que solo funcionen mientras las mantenés)\n• Win: un toque es una pulsación (abre Inicio); mantener presionado = presionada mientras la mantenés (Win + una tecla)\n\nBotones abajo a la derecha\n• Teclado: mostrar / ocultar el teclado del teléfono\n• Teclas de atajo: dejar fija la barra de atajos (tocá de nuevo para ocultarla)\n\nBarra de arriba\n• Queda fija hasta que la ocultás con ˄; la ˅ de arriba la vuelve a mostrar\n• El botón de modo cambia entre panel táctil → toque directo → modo juego; mantenelo presionado para elegir uno, o un perfil de juego\n• Con más de una pantalla en la PC: el botón de dos pantallas las muestra todas juntas (pellizcá para ver de cerca; tocalo de nuevo para volver a una), el de la pantalla con flecha pasa a la siguiente\n• ⋮: enviar archivos a la PC o traer uno, enviar el portapapeles del teléfono, elegir pantalla, Ctrl+Alt+Del, bloquear la PC, Administrador de tareas\n\nModo juego\n• Un control en pantalla: mantener un botón mantiene su tecla o botón del mouse en la PC\n• El stick (DualShock) gira suave; Configuración → Tipo de control → Digital pone la cruceta\n• Arrastrá entre los botones para mover el puntero; en un juego que oculta el puntero, gira la cámara\n• Cada perfil tiene su nombre y sus botones: Configuración → Perfiles…\n\nConfiguración (⋮ → Configuración): velocidad del puntero, teclado, modo juego, imagen, sonido, seguir conectado en segundo plano, portapapeles, copiar fotos y videos</string>
 
     <string name="tb_keyboard">Teclado</string>
     <string name="tb_keyboard_hide">Ocultar teclado</string>
@@ -192,6 +192,7 @@
     <string name="files_received">Guardado en Descargas/DeskLink: %1$s</string>
     <string name="files_received_app">Guardado en %1$s</string>
     <string name="files_receive_failed">No se pudo recibir %1$s</string>
+    <string name="files_no_app">Ninguna app del teléfono abre %1$s</string>
     <string name="files_pick_on_pc">Elegí el archivo en la pantalla de la PC…</string>
     <string name="files_none_chosen">No se eligió ningún archivo en la PC</string>
     <string name="files_not_connected">Sin conexión</string>
@@ -292,4 +293,45 @@
     <string name="set_arrow_color">Color de las flechas</string>
     <string name="set_arrow_color_sum">Las flechas del stick, y los brazos de la cruceta mientras se mantienen.</string>
     <string name="set_color_n">Color %1$d</string>
+
+    <!-- Seguir conectado (2.17) -->
+    <string name="set_connection">Conexión</string>
+    <string name="set_stay">Seguir conectado en segundo plano</string>
+    <string name="set_stay_sum">El sonido de la PC sigue con el teléfono bloqueado o en otra app. Necesita DeskLink 2.12 en la PC.</string>
+    <string name="note_channel_connection">Conexión</string>
+    <string name="note_connected">Conectado a %1$s</string>
+
+    <!-- Copia de seguridad (2.17) -->
+    <string name="set_backup">Copia de seguridad</string>
+    <string name="set_backup_row">Copiar fotos y videos a la PC</string>
+    <string name="set_backup_sum">En la PC, en Imágenes › DeskLink backup. Solo con wifi.</string>
+    <string name="set_backup_last">La última vez: %1$s, %2$s en %3$s</string>
+    <string name="backup_choose_pc">¿A qué PC las copiás?</string>
+    <string name="backup_no_access">DeskLink no puede ver las fotos y los videos</string>
+    <string name="backup_allow">Permitir</string>
+    <string name="backup_to">Copiando a %1$s</string>
+    <string name="backup_looking">Buscando las fotos y los videos…</string>
+    <string name="backup_connecting">Conectando con %1$s…</string>
+    <string name="backup_checking">Viendo qué tiene ya %1$s…</string>
+    <string name="backup_progress">%1$s de %2$s · %3$s de %4$s</string>
+    <string name="backup_waiting_wifi">Esperando wifi</string>
+    <string name="backup_waiting_pc">Esperando a %1$s…</string>
+    <string name="backup_stop">Detener</string>
+    <string name="backup_continue">Seguir</string>
+    <string name="backup_done">Copia terminada</string>
+    <plurals name="backup_done_files">
+        <item quantity="one">%1$s foto o video en %2$s</item>
+        <item quantity="other">%1$s fotos y videos en %2$s</item>
+    </plurals>
+    <plurals name="backup_left_out">
+        <item quantity="one">%1$s no se pudo leer</item>
+        <item quantity="other">%1$s no se pudieron leer</item>
+    </plurals>
+    <string name="backup_stopped">Copia detenida</string>
+    <string name="backup_stopped_at">%1$s de %2$s están en la PC</string>
+    <string name="backup_no_wifi">Sin wifi durante 2 horas</string>
+    <string name="backup_old_pc">%1$s necesita DeskLink 2.12 o posterior</string>
+    <string name="backup_refused">%1$s no aceptó los archivos</string>
+    <string name="backup_sd_card">Tarjeta SD</string>
+    <string name="note_channel_backup">Copia de seguridad</string>
 </resources>

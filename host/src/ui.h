@@ -19,6 +19,8 @@ void SessionEnded();
 void SetClipboardText(const std::string& utf8, std::function<void(bool)> done = nullptr);
 void RequestClipboardPush();  // send the current PC clipboard to the phone
 void FileReceived(const std::wstring& path);
+// A phone's backup is over: one notice ("Backup from <phone>: N photos and videos saved"); clicking it opens folder.
+void BackupFinished(const std::wstring& folder, const std::wstring& device, uint32_t files);
 void Notify(const std::wstring& title, const std::wstring& text);
 void RefreshTray();
 void ShowPairingWindow();

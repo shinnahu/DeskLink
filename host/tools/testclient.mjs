@@ -132,6 +132,71 @@ async function pair(name) {
 
 function auth(c, creds, name) { send(c, 0x01, creds.deviceId, creds.token, str(name), u16(1)); }
 
+// A side connection (phones from 2.17, for a backup): AUTH with the SIDE flag. Its AUTH_RESULT status.
+async function side(creds, name) {
+  const s = await connect();
+  send(s, 0x01, creds.deviceId, creds.token, str(name), u16(1), u8(1));
+  const r = await recvType(s, 0x80);
+  const st = r.r.u8();
+  if (st === 0) await recvType(s, 0x83);
+  return { s, st };
+}
+
+// BACKUP_CHECK: what the PC has of each {folder, name, size}
+async function backupCheck(s, req, entries) {
+  send(s, 0x48, u32(req), u16(entries.length), ...entries.flatMap((e) => [str(e.folder), str(e.name), u64(e.size)]));
+  const m = await recvType(s, 0x49, 5000);
+  const rq = m.r.u32(), n = m.r.u16(), have = [];
+  for (let i = 0; i < n; i++) have.push(Number(m.r.u64()));
+  return { rq, have };
+}
+
+// A backup file from `offset` on (FILE_BEGIN of kind 2). Without `upTo` it ends it and gives the PC's FILE_DONE.
+async function backupSend(s, id, e, data, mtimeMs, offset, upTo) {
+  send(s, 0x40, u32(id), u64(data.length), str(e.name), str('image/jpeg'), u8(2), str(e.folder), u64(mtimeMs), u64(offset));
+  const end = upTo ?? data.length;
+  for (let off = offset; off < end; off += 200 * 1024) send(s, 0x41, u32(id), data.subarray(off, Math.min(end, off + 200 * 1024)));
+  if (upTo !== undefined) return null;
+  send(s, 0x42, u32(id));
+  const d = await recvType(s, 0x45, 15000);
+  return { id: d.r.u32(), st: d.r.u8(), info: d.r.str() };
+}
+
+// Is the connection still there? (a PING gets its PONG)
+async function answers(c) {
+  send(c, 0x50, u64(Date.now()));
+  try { await recvType(c, 0x51, 3000); return true; } catch { return false; }
+}
+
+// A quiet tone for the PC's speakers (48 kHz stereo, about -30 dB), played by Windows while the sound is checked
+function toneWav(file, seconds, hz) {
+  const rate = 48000, n = rate * seconds, data = Buffer.alloc(n * 4);
+  for (let i = 0; i < n; i++) {
+    const v = Math.round(Math.sin(2 * Math.PI * hz * i / rate) * 1000);
+    data.writeInt16LE(v, i * 4); data.writeInt16LE(v, i * 4 + 2);
+  }
+  const h = Buffer.alloc(44);
+  h.write('RIFF', 0); h.writeUInt32LE(36 + data.length, 4); h.write('WAVE', 8); h.write('fmt ', 12);
+  h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(2, 22); h.writeUInt32LE(rate, 24);
+  h.writeUInt32LE(rate * 4, 28); h.writeUInt16LE(4, 32); h.writeUInt16LE(16, 34); h.write('data', 36);
+  h.writeUInt32LE(data.length, 40);
+  fs.writeFileSync(file, Buffer.concat([h, data]));
+}
+
+// AUDIO_DATA frames that come in `ms` (video frames are acked, pings answered)
+async function countSound(c, ms) {
+  let frames = 0;
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    let m;
+    try { m = await Promise.race([recv(c), new Promise((_, rej) => setTimeout(() => rej(new Error('idle')), 200))]); } catch { continue; }
+    if (m.type === 0x96) frames++;
+    else if (m.type === 0x91) send(c, 0x13, u32(m.r.u32()));
+    else if (m.type === 0x50) send(c, 0x51, m.raw.subarray(0, 8));
+  }
+  return frames;
+}
+
 async function main() {
   fs.mkdirSync(WORK, { recursive: true });
   // 1. pair device A and continue on the same connection with AUTH
@@ -296,6 +361,108 @@ async function main() {
   ok(did === 1 && dst === 0 && saved && saved.equals(blob), `upload saved as "${info}"`);
   if (saved) fs.unlinkSync(info);
 
+  // 4b. a backup (host 2.12, capability BACKUP) on a side connection, while A's remote session goes on
+  ok((caps & 2048) !== 0 && (caps & 1024) !== 0, `capabilities include BACKUP and SOUND_PAUSED (${caps})`);
+  {
+    const run = crypto.randomBytes(3).toString('hex'); // folders of their own: a test run before left its files
+    const cam = { folder: `DCIM/Camera ${run}`, name: 'IMG_0001.jpg' };
+    const wa = { folder: `WhatsApp ${run}/Media/WhatsApp Images`, name: 'IMG-ñandú.jpg' };
+    const vid = { folder: `DCIM/Camera ${run}`, name: 'VID_0002.mp4' };
+    const camData = crypto.randomBytes(700 * 1024 + 5), waData = crypto.randomBytes(90 * 1024), vidData = crypto.randomBytes(3 * 1024 * 1024 + 77);
+    cam.size = camData.length; wa.size = waData.length; vid.size = vidData.length;
+    const mtime = Date.UTC(2021, 4, 6, 12, 34, 56, 789);
+    let { s, st } = await side(creds, 'Phone A');
+    ok(st === 0 && await answers(c), 'side connection: AUTH ok, and A\'s remote session is still there');
+    let ch = await backupCheck(s, 7, [cam, wa, vid]);
+    ok(ch.rq === 7 && ch.have.join() === '0,0,0', `BACKUP_CHECK of 3 new files: ${ch.have.join(', ')}`);
+    const d1 = await backupSend(s, 11, cam, camData, mtime, 0);
+    const p1 = d1 && d1.info, f1 = p1 && fs.existsSync(p1) ? fs.readFileSync(p1) : null;
+    const want1 = path.join('backup', 'Phone A', 'DCIM', `Camera ${run}`, 'IMG_0001.jpg');
+    ok(d1 && d1.st === 0 && f1 && f1.equals(camData) && p1.endsWith(want1),
+      `backup file saved in its folder: ${p1}`);
+    ok(f1 && Math.abs(fs.statSync(p1).mtimeMs - mtime) < 2, `it has the phone's date (${f1 && fs.statSync(p1).mtime.toISOString()})`);
+    // the video, cut off a bit after the PC said it had 1 MB: its part stays for the next backup
+    await backupSend(s, 13, vid, vidData, mtime, 0, 1536 * 1024);
+    const pr = await recvType(s, 0x44, 5000);
+    pr.r.u32();
+    const acked = Number(pr.r.u64());
+    await new Promise((r) => setTimeout(r, 400));
+    s.close();
+    await new Promise((r) => setTimeout(r, 600));
+    ({ s, st } = await side(creds, 'Phone A'));
+    ch = await backupCheck(s, 8, [cam, wa, vid]);
+    const part = ch.have[2];
+    ok(st === 0 && ch.have[0] === cam.size && ch.have[1] === 0 && part >= acked && part < vid.size,
+      `after the cut: the photo is there, the video goes on from ${part} of ${vid.size} bytes (${acked} acknowledged)`);
+    const d3 = await backupSend(s, 15, vid, vidData, mtime, part);
+    const f3 = d3 && fs.existsSync(d3.info) ? fs.readFileSync(d3.info) : null;
+    ok(d3 && d3.st === 0 && f3 && f3.equals(vidData), `the video, gone on from its part, is whole: ${d3 && d3.info}`);
+    const dir = p1 ? path.dirname(p1) : null;
+    ok(dir && fs.readdirSync(dir).filter((n) => n.endsWith('.part')).length === 0, 'no part is left behind');
+    const d2 = await backupSend(s, 17, wa, waData, 0, 0);
+    const want2 = path.join('backup', 'Phone A', `WhatsApp ${run}`, 'Media', 'WhatsApp Images', 'IMG-ñandú.jpg');
+    ok(d2 && d2.st === 0 && d2.info.endsWith(want2) && fs.readFileSync(d2.info).equals(waData),
+      `folders inside folders, a name with ñ, no date given: ${d2 && d2.info}`);
+    // another file of the same name and folder: it's kept beside the first, and found there the next time
+    const other = { folder: cam.folder, name: cam.name }, otherData = crypto.randomBytes(1234);
+    other.size = otherData.length;
+    const d4 = await backupSend(s, 19, other, otherData, mtime, 0);
+    ch = await backupCheck(s, 9, [cam, wa, vid, other]);
+    ok(d4 && d4.st === 0 && d4.info.endsWith('IMG_0001 (1).jpg') && ch.have.join() === [cam.size, wa.size, vid.size, other.size].join(),
+      `everything is there for the next backup: ${ch.have.join(', ')} (the other one as ${d4 && path.basename(d4.info)})`);
+    // the backup's end; and a side connection takes no input: with --no-inject the PC would log the key
+    const logPath = process.env.HOST_LOG;
+    const mark = logPath && fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').length : 0;
+    send(s, 0x4a, u32(4), u64(cam.size + vid.size + wa.size + other.size), u32(0));
+    send(s, 0x23, u16(0x41), u8(1));
+    send(s, 0x23, u16(0x41), u8(0));
+    const stillThere = await answers(s);
+    if (logPath) {
+      await new Promise((r) => setTimeout(r, 500));
+      const added = fs.readFileSync(logPath, 'utf8').slice(mark);
+      ok(stillThere && !added.includes('vk=0x41') && added.includes('backup from Phone A over: 4 files'),
+        'the side connection\'s key is left alone; the backup\'s end is in the log');
+    } else {
+      ok(stillThere, 'the side connection takes a key without ending (HOST_LOG not set: the log is not checked)');
+    }
+    // a newer side connection of the same phone replaces the older one, and A's session stays
+    const { s: s2, st: st2 } = await side(creds, 'Phone A');
+    const bye = await recvType(s, 0x5f, 3000).catch(() => null);
+    ok(st2 === 0 && bye && bye.r.u8() === 2 && await answers(c), 'a newer side connection replaces the older one; A\'s session stays');
+    send(s2, 0x5f, u8(0), str('bye'));
+    s2.close();
+    s.close();
+    if (dir) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(path.join(dir, '..', '..', `WhatsApp ${run}`), { recursive: true, force: true });
+    }
+  }
+
+  // 4c. the sound goes on while the picture is paused (host 2.12, SOUND_PAUSED): a quiet tone plays on the PC
+  {
+    send(c, 0x16, u8(1 | 2));
+    const af2 = await recvType(c, 0x95, 4000);
+    if (af2.r.u8() === 0) {
+      console.log('      sound while paused not checked: this PC has no sound output');
+    } else {
+      const wav = path.join(WORK, 'tone.wav');
+      toneWav(wav, 4, 523);
+      const { spawn } = await import('node:child_process');
+      const player = spawn('powershell', ['-NoProfile', '-Command', `(New-Object Media.SoundPlayer '${wav}').PlaySync()`], { stdio: 'ignore' });
+      await new Promise((r) => setTimeout(r, 700));
+      send(c, 0x11, u8(1)); // pause, keeping the sound
+      const kept = await countSound(c, 1500);
+      send(c, 0x11); // a plain pause stops it
+      await countSound(c, 400);
+      const after = await countSound(c, 1000);
+      player.kill();
+      send(c, 0x12);
+      await recvType(c, 0x91, 3000).catch(() => null);
+      ok(kept > 20 && after === 0, `paused with KEEP_SOUND: ${kept} sound frames in 1.5 s; a plain pause: ${after} in 1 s`);
+    }
+    send(c, 0x16, u8(1)); // sound off again
+  }
+
   // 5. second phone: busy + status
   const { c: c2, creds: creds2 } = await pair('Phone B');
   auth(c2, creds2, 'Phone B');
@@ -303,6 +470,11 @@ async function main() {
   const bst = busy.r.u8();
   ok(bst === 3, `B: AUTH while A is active -> BUSY (${bst}: ${busy.r.str()})`);
   c2.close();
+  // ...but B's backup isn't turned away: it takes nothing from A
+  const { s: sb, st: sbst } = await side(creds2, 'Phone B');
+  ok(sbst === 0 && await answers(c), `B: a side connection while A is active -> OK (${sbst}); A stays`);
+  send(sb, 0x5f, u8(0), str('bye'));
+  sb.close();
   const c3 = await connect();
   send(c3, 0x04, creds2.deviceId, creds2.token);
   const sr = await recvType(c3, 0x84);

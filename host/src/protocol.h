@@ -44,6 +44,10 @@ enum : uint8_t {
   FILE_DONE = 0x45,
   FILE_REQUEST = 0x46,
   FILE_REQUEST_NONE = 0x47,
+  // caps::BACKUP, on a side connection (authflag::SIDE): the phone's photos and videos, kept in folders like its own
+  BACKUP_CHECK = 0x48,  // phone -> PC: u32 req u16 n, n x (str folder str name u64 size)
+  BACKUP_STATE = 0x49,  // PC -> phone: u32 req u16 n, n x u64 have (size: it's here; less: a part to go on from)
+  BACKUP_END = 0x4A,    // phone -> PC: u32 files u64 bytes u32 failed (one notice on the PC instead of one per file)
 
   PING = 0x50,
   PONG = 0x51,
@@ -73,9 +77,22 @@ namespace sflag {
 enum : uint8_t { CLIPBOARD = 1, AUDIO = 2 };
 }
 
-// FILE_BEGIN's last byte (sent only when not FILE): what the file is
+// FILE_BEGIN's last byte (sent only when not FILE): what the file is. BACKUP (phone -> PC, side connection only) is
+// followed by str folder, u64 modifiedMs (unix ms, 0: not known), u64 offset (the data starts there)
 namespace fkind {
-enum : uint8_t { FILE = 0, SCREENSHOT = 1 };
+enum : uint8_t { FILE = 0, SCREENSHOT = 1, BACKUP = 2 };
+}
+
+// AUTH's optional last byte
+namespace authflag {
+// A side connection, for a backup: it neither replaces the phone's remote session nor is replaced by it, nobody is
+// told the PC is in use, and only file messages count on it
+enum : uint8_t { SIDE = 1 };
+}
+
+// STREAM_PAUSE's optional byte (caps::SOUND_PAUSED)
+namespace pauseflag {
+enum : uint8_t { KEEP_SOUND = 1 };  // the picture stops, the sound goes on (the phone is locked, playing it)
 }
 
 // SCREENSHOT_FAILED reasons
@@ -100,10 +117,11 @@ namespace caps {
 // KNOCK: connections from the internet must start with a knock (PROTOCOL.md §2), and HOST_INFO ends with the
 // mobile-data flags. REL_MOUSE: MOUSE_REL is understood. ALL_SCREENS: monitor kMonitorAll shows every screen at once.
 // AUDIO: the PC's sound comes with the stream when the phone asks for it (sflag::AUDIO). SCREENSHOT: msg::SCREENSHOT
-// is understood. PASTE: msg::PASTE is understood.
+// is understood. PASTE: msg::PASTE is understood. SOUND_PAUSED: STREAM_PAUSE may keep the sound (pauseflag).
+// BACKUP: side connections (authflag::SIDE), BACKUP_CHECK / BACKUP_END and backup files (fkind::BACKUP).
 enum : uint32_t {
   CTRL_ALT_DEL = 1, FILES = 2, CLIPBOARD = 4, SERVICE_MODE = 8, KNOCK = 16, REL_MOUSE = 32, ALL_SCREENS = 64, AUDIO = 128,
-  SCREENSHOT = 256, PASTE = 512
+  SCREENSHOT = 256, PASTE = 512, SOUND_PAUSED = 1024, BACKUP = 2048
 };
 }
 

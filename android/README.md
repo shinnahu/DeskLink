@@ -49,6 +49,15 @@ its own, so the clipboard is not the desktop's (see [host/README.md](../host/REA
 
 Without `-Phost` and `-Pstation` the test is skipped.
 
+`BackupAndStayLiveTest` runs the backup service and the session screen against a test build of the host (2.12) started
+with `--data <folder> --bind 127.0.0.1 --port 47910 --no-ui --auto-approve --no-inject`: a backup that arrives with its
+folders and dates, the next one sending nothing, one stopped part way and continued, and *Stay connected* keeping the
+session and the PC's sound in the background (a quiet tone plays on the PC for a few seconds):
+
+```bash
+./gradlew :app:testDebugUnitTest --tests com.desklink.app.BackupAndStayLiveTest -Phost=127.0.0.1:47910 -Phostdata=<that folder>
+```
+
 ## Desktop CLI (integration tests against the host)
 
 ```bash
@@ -58,7 +67,9 @@ java -cp core/build/libs/core.jar com.desklink.core.tools.CliClient status 127.0
 java -cp core/build/libs/core.jar com.desklink.core.tools.CliClient connect 127.0.0.1 47810 10 out.h264
 ```
 
-Commands: `pair`, `status`, `connect`, `send-file`, `get-file`, `type`, `clip`, `move`, `click`, `key`, `discover`.
+Commands: `pair`, `status`, `connect`, `send-file`, `backup`, `get-file`, `type`, `clip`, `move`, `click`, `key`,
+`discover`. `backup <host> <folder> [stopAfterMB]` sends a folder's files as a phone's backup (side connection, the
+phone's own backup code); with `stopAfterMB` it stops part way, and the next run goes on from there.
 Credentials go to `./desklink-cli.json` (override with env `DESKLINK_CREDS`).
 
 Without Gradle:

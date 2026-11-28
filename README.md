@@ -4,8 +4,8 @@ A lightweight remote desktop made of two small programs, with no browser, no Chr
 
 | part | file | size |
 |---|---|---|
-| Windows host (your PC) | `dist/DeskLinkHost.exe` | 723 KB (version 2.11), no install required to try |
-| Android app (your phone) | `dist/DeskLink.apk` | 197 KB (version 2.16) |
+| Windows host (your PC) | `dist/DeskLinkHost.exe` | 748 KB (version 2.12), no install required to try |
+| Android app (your phone) | `dist/DeskLink.apk` | 213 KB (version 2.17) |
 
 On GitHub, both files are attached to the latest release (*Releases*, on the right of the repository page) rather than
 kept in the code; older releases are removed.
@@ -23,9 +23,9 @@ stand-in.
 |---|---|
 | <img src="docs/phone-all-screens.png" alt="Two screens side by side, as Windows arranges them" width="400"> | <img src="docs/phone-gaming.png" alt="The on-screen gamepad over a game" width="400"> |
 
-| A gaming profile's buttons | Settings: Gaming mode |
-|---|---|
-| <img src="docs/phone-bindings.png" alt="The binding editor: what each button does on the PC" width="240"> | <img src="docs/phone-settings-gaming.png" alt="The Gaming mode settings" width="240"> |
+| A gaming profile's buttons | Settings: Gaming mode | Settings: staying connected, a backup under way |
+|---|---|---|
+| <img src="docs/phone-bindings.png" alt="The binding editor: what each button does on the PC" width="240"> | <img src="docs/phone-settings-gaming.png" alt="The Gaming mode settings" width="240"> | <img src="docs/phone-settings-backup.png" alt="Settings: Stay connected in the background, and Back up photos and videos with a backup under way (how many, how much, Stop)" width="240"> |
 
 Linking a phone, on the PC: DeskLink waits for the phone, shows the code to compare, and the phone is linked.
 
@@ -67,8 +67,11 @@ picture, the session carries on, and changes apply right away). One page:
 | Pointer | *Pointer speed* (1 to 9, default 3), *Glide* (off, or 1 to 9, default 5), *Invert scrolling* |
 | Keyboard | *Predictive text* (on by default), *Ctrl, Shift and Alt* (a tap keeps one pressed, the default; or pressed only while held) |
 | Gaming mode | *Pad type* (DualShock: the analog stick, default; or Digital: the D-pad), *Camera speed*, *Names on the controls* (always, for 5 seconds when Gaming mode starts, or off), *Line thickness* (1 to 5, default 3; 5 = the icons as drawn), *Opacity* (20 to 100 %), *Stick look* (ring, arrows and ball; ring and ball, the default; or the ball only), *Arrow color* (white by default), *Colored buttons*, *Profiles…* |
-| Picture | *Quality* (Auto, High, Balanced, Data saver), *Full screen*, *Show stats* |
+| Picture | *Quality* (Auto, High, Balanced, Data saver), *Full screen*, *Show stats*, *Short notes* |
+| Sound | *Play the PC's sound* (on by default) |
+| Connection | *Stay connected in the background* (off by default; 2.17) |
 | Clipboard | *Sync clipboard* (on by default) |
+| Backup | *Back up photos and videos* (2.17) |
 | Security | *Lock with fingerprint* (Android 10 and later) |
 | Help | *Gestures* |
 
@@ -257,14 +260,37 @@ off too. A note says *Sent to the PC's clipboard*; paste on the PC as usual. Wit
 **Files**
 * ⋮ → **Send files to PC**: pick files. They are saved on the PC in `Downloads\DeskLink` and a notification appears.
 * ⋮ → **Get file from PC**: a file picker opens on the PC screen; choose the file with the remote pointer. It is saved on the
-  phone in `Downloads/DeskLink`.
+  phone in `Downloads/DeskLink`. *Open* on its note opens it in the phone's app for that kind of file; an APK goes to
+  Android's installer (2.17; Android may first ask to allow installing apps from DeskLink). When no app on the phone
+  opens that kind of file, the note says so.
 * From any app: **Share → DeskLink → Send to PC**.
 * Screenshots (the camera in the top bar) are saved on the phone in `Pictures/DeskLink`.
+
+**Backup of the photos and videos** (phone 2.17, PC 2.12): Settings → *Back up photos and videos*. Every photo and
+video on the phone goes to the PC, into `Pictures\DeskLink backup\<the phone's name>`, in the phone's own folders
+(`DCIM\Camera`, `Pictures\Screenshots`, `WhatsApp\Media\…`; a memory card's under `SD card`), each with the date it
+has on the phone. Nothing is taken off the phone.
+* The first time, Android asks to let DeskLink see the photos and videos (and, from Android 13, show notifications).
+* It runs with a notification (how many, how much, *Stop*), also with the screen off or in another app, on its own
+  connection: a session to the same PC can be open at the same time, and nothing shows on the PC while it goes.
+* Only over Wi-Fi: on mobile data it waits, and goes on when Wi-Fi is back. A dropped connection is taken up again by
+  itself; a file cut off goes on from where the PC got to.
+* The next time, only what isn't on the PC yet goes. A file of the same name that's a different one is kept beside the
+  first as `name (1).jpg`.
+* At the end the PC shows one notice (*Backup from …: N photos and videos saved*; clicking it opens the folder), and
+  the phone one notification: *Backup done*, or *Backup stopped* with *Continue*.
+* When the PC's Pictures folder is in OneDrive, the backup goes to the `Pictures` folder in the user's own folder
+  instead, so it doesn't go up to the cloud.
+
+**Stay connected in the background** (phone 2.17, Settings → Connection): leaving DeskLink, or locking the phone,
+doesn't end the session. The PC's sound keeps playing on the phone (PC 2.12; older PCs keep the connection but stop
+the sound), and a notification *Connected to …* says so, with *Disconnect*. A dropped connection comes back by itself.
+Back in DeskLink, the picture is there again.
 
 **Connection status**: a dot in the toolbar (green, yellow, or red) plus the ping in ms. If the connection drops, the picture
 is dimmed with *Connection lost — reconnecting…* and touches are ignored until it's back. It reconnects on its own and
 never shows a frozen screen as if it were live. When you leave the app the stream pauses; coming back resumes it, or
-reconnects if needed. After 60 s in the background it disconnects.
+reconnects if needed. After 60 s in the background it disconnects, unless *Stay connected in the background* is on.
 
 **On the PC**: a small **● Shared with Galaxy S23 [Stop]** pill sits in the bottom-right corner. It shows the phone's name,
 not your email; you can drag it anywhere, and **Stop** ends the session. It is only for whoever is at the PC: screen
@@ -542,6 +568,37 @@ didn't come to the phone. With the sync on,
 the button sent again a copy the PC no longer held, and text that had come from the PC. A copy marked private went
 only with the button. With nothing on the phone's clipboard nothing was sent, and the note said so. Not yet tried on
 the phone.
+Version 2.17 (phone) and 2.12 (PC) add Settings → *Back up photos and videos* and Settings → *Stay connected in the
+background* (see **Files** above). Sending all the photos with *Send files to PC* would have meant picking each one by
+hand, it stopped a minute after leaving the app, a dropped connection lost the file being sent and the share screen's
+*Retry* sent every file again, the PC saved them all loose in `Downloads\DeskLink` with the day of the copy as their
+date, and showed a notice per file. The backup has its own connection beside the session (new: `AUTH`'s SIDE flag),
+asks the PC what it has (`BACKUP_CHECK`), sends the rest with their folder and date (`FILE_BEGIN` of kind 2), and the
+PC keeps a cut-off file's part to go on from. *Stay connected* keeps the session in a foreground service, and the
+PC keeps sending its sound without the picture (`STREAM_PAUSE` with KEEP_SOUND). See [PROTOCOL.md](PROTOCOL.md).
+Checked on this PC, over 127.0.0.1, with a test build of the PC's code:
+* the test client (`host/tools/testclient.mjs`): a side connection beside the remote session; the check of 3 new files;
+  a photo saved in its folder with the phone's date; a video cut off after 1.5 MB going on from its part and arriving
+  whole; folders inside folders and a name with ñ; another file of the same name kept as `IMG_0001 (1).jpg` and found
+  by the next check; a key sent on the side connection left alone; the backup's end in the PC's log; a newer side
+  connection replacing the older one; a second phone's side connection let in while the first controls the PC; and
+  with a quiet tone playing on this PC, 85 to 89 sound frames in 1.5 s while paused with KEEP_SOUND and none after a
+  plain pause. All the earlier checks still pass.
+* the phone's backup code from a desktop client (`CliClient backup`): 15 files (84.6 MB) in nested folders arrived
+  byte for byte with their dates; stopped 40 MB in, the PC kept a 12.1 MB part of the 60 MB video, and the next run
+  sent the 3 files left (48 MB), the video from its part; a third run sent nothing.
+* the app's own code, run with Robolectric (`BackupAndStayLiveTest`): the backup service sent 3 files, which arrived
+  byte for byte with their dates, its notification said *Backup done*, and a second backup sent nothing; a backup
+  stopped part way said *Backup stopped* with *Continue*, the PC kept a part, and continuing sent exactly the rest;
+  with *Stay connected* on, the session screen sent to the background started the service, the PC kept the sound
+  going, about 475 KB of it reached the phone's (stand-in) speaker in 2.5 s, and 70 s later (the app's clock) it was
+  still connected; with it off, the connection closed after a minute as before. Unit tests (4 new) for the folders a
+  backup uses. Not yet tried on the phone.
+2.17 also fixes *Open* on a file from the PC when it's an APK: DeskLink didn't declare the permission to hand APKs to
+Android's installer, and the installer then closes at once without showing anything (Android's own code,
+`InstallStart.java` in AOSP, read on 2026-11-28). When no app opens a file, the note now says so; before, a short
+message showed only its name. Checked with unit tests (3 new): *Open* hands an APK and a photo to Android with the
+right type and leave to read them, and the note when nothing opens it. Not yet tried on the phone.
 
 Not yet verified:
 * the installed-service features (lock screen, UAC, Ctrl+Alt+Del);
@@ -563,6 +620,13 @@ Not yet verified:
   the app.
 * 2.16 on the phone: ⋮ → *Send clipboard* with *Sync clipboard* on and off, to the installed PC; its note next to the
   message Android 12 and later may show when an app reads the clipboard.
+* 2.17 on the phone: *Open* on an APK from the PC (Android's question the first time, then the install), and on
+  other kinds of files;
+* 2.17 on the phone: the backup of a real phone's photos and videos (Android's permission questions, the media store's
+  folders, a backup of several GB, the screen off, Wi-Fi and mobile data in turn, how fast it goes over Wi-Fi), and
+  *Stay connected* with the phone locked (whether Android lets the service start as DeskLink leaves the screen, and
+  the PC's sound on the lock screen for a long time). On the PC: the installed service's backup folder (as the
+  signed-in user), and a Pictures folder in OneDrive.
 
 ## Build from source
 

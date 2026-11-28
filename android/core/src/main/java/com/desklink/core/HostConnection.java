@@ -121,6 +121,8 @@ public final class HostConnection implements Closeable {
     private int nextFileId = 1;
     private final Map<Integer, Outgoing> outgoing = new ConcurrentHashMap<>();
     private final Map<Integer, Incoming> incoming = new ConcurrentHashMap<>();
+    private int nextCheck = 1;
+    private final Map<Integer, long[][]> checks = new ConcurrentHashMap<>(); // BACKUP_CHECKs waiting: [0] = the answer
 
     private HostConnection(SecureChannel ch, HostInfo info, Listener listener) {
         this.ch = ch;
@@ -132,9 +134,18 @@ public final class HostConnection implements Closeable {
 
     /** Connects to the best address, verifies the pinned identity, authenticates and starts the session threads. */
     public static HostConnection connect(PairedHost host, String deviceName, Listener listener, int timeoutMs) throws IOException {
+        return connect(host, deviceName, listener, timeoutMs, 0);
+    }
+
+    /**
+     * The same, with AUTH's flags: {@link Protocol#AUTH_SIDE} makes it a side connection, for a backup, beside the
+     * remote session (a PC without {@link Protocol#CAP_BACKUP} takes it as a remote session).
+     */
+    public static HostConnection connect(PairedHost host, String deviceName, Listener listener, int timeoutMs, int authFlags)
+            throws IOException {
         SecureChannel ch = Connector.open(host.candidates(), host.port, host.fingerprint, timeoutMs, 250, host.knockKey());
         try {
-            HostInfo info = authenticate(ch, host, deviceName);
+            HostInfo info = authenticate(ch, host, deviceName, authFlags);
             return start(ch, info, listener);
         } catch (IOException | RuntimeException e) {
             ch.close();
@@ -151,9 +162,16 @@ public final class HostConnection implements Closeable {
 
     /** Sends AUTH, waits for AUTH_RESULT and HOST_INFO. Throws {@link AuthException} on a non-OK status. */
     public static HostInfo authenticate(SecureChannel ch, PairedHost host, String deviceName) throws IOException {
+        return authenticate(ch, host, deviceName, 0);
+    }
+
+    /** authFlags: AUTH's last byte ({@link Protocol#AUTH_SIDE}), left out when 0 (as before 2.17). */
+    public static HostInfo authenticate(SecureChannel ch, PairedHost host, String deviceName, int authFlags) throws IOException {
         ch.setReadTimeout(15000);
-        ch.send(new ByteWriter(96).u8(Protocol.AUTH).bytes(fixed(host.deviceId, 16)).bytes(fixed(host.token, 32))
-                .str(deviceName).u16(Protocol.CLIENT_VERSION).toByteArray());
+        ByteWriter w = new ByteWriter(96).u8(Protocol.AUTH).bytes(fixed(host.deviceId, 16)).bytes(fixed(host.token, 32))
+                .str(deviceName).u16(Protocol.CLIENT_VERSION);
+        if (authFlags != 0) w.u8(authFlags);
+        ch.send(w.toByteArray());
         byte[] m = expect(ch, Protocol.AUTH_RESULT);
         ByteReader r = new ByteReader(m, 1, m.length - 1);
         int status = r.u8();
@@ -354,6 +372,20 @@ public final class HostConnection implements Closeable {
             case Protocol.FILE_REQUEST_NONE:
                 listener.onFileRequestNone();
                 break;
+            case Protocol.BACKUP_STATE: {
+                int req = r.i32();
+                int n = r.u16();
+                long[] have = new long[n];
+                for (int i = 0; i < n; i++) have[i] = r.u64();
+                long[][] slot = checks.remove(req);
+                if (slot != null) {
+                    synchronized (slot) {
+                        slot[0] = have;
+                        slot.notifyAll();
+                    }
+                }
+                break;
+            }
             case Protocol.SCREENSHOT_FAILED: {
                 int reason = r.u8();
                 String detail = r.remaining() >= 2 ? r.str() : "";
@@ -476,14 +508,28 @@ public final class HostConnection implements Closeable {
         private boolean cancelled, peerCancelled, doneReported;
         private int peerStatus = -1;
         private String peerInfo = "";
+        // a file of a backup (FILE_KIND_BACKUP): its folder on the phone, its date, and where its data starts
+        private final boolean backup;
+        private final String folder;
+        private final long modifiedMs, offset;
 
         Outgoing(int id, String name, long size, String mime, InputStream in, SendListener l) {
+            this(id, name, size, mime, in, l, false, null, 0, 0);
+        }
+
+        Outgoing(int id, String name, long size, String mime, InputStream in, SendListener l, boolean backup,
+                 String folder, long modifiedMs, long offset) {
             this.id = id;
             this.name = name;
             this.size = size;
             this.mime = mime == null ? "application/octet-stream" : mime;
             this.in = in;
             this.l = l;
+            this.backup = backup;
+            this.folder = folder == null ? "" : folder;
+            this.modifiedMs = modifiedMs;
+            this.offset = offset;
+            this.acked = offset;
         }
 
         void acked(long v) {
@@ -532,9 +578,11 @@ public final class HostConnection implements Closeable {
 
         void run() {
             try {
-                enqueue(new ByteWriter(64).u8(Protocol.FILE_BEGIN).i32(id).u64(Math.max(0, size)).str(name).str(mime).toByteArray(), false);
+                ByteWriter begin = new ByteWriter(96).u8(Protocol.FILE_BEGIN).i32(id).u64(Math.max(0, size)).str(name).str(mime);
+                if (backup) begin.u8(Protocol.FILE_KIND_BACKUP).str(folder).u64(Math.max(0, modifiedMs)).u64(offset);
+                enqueue(begin.toByteArray(), false);
                 byte[] buf = new byte[Protocol.FILE_CHUNK];
-                long sent = 0;
+                long sent = offset; // (the stream starts there too)
                 while (true) {
                     synchronized (lock) {
                         while (!cancelled && !peerCancelled && !closed && peerStatus < 0 && sent - acked >= Protocol.FILE_WINDOW) {
@@ -591,17 +639,73 @@ public final class HostConnection implements Closeable {
 
     /** Streams a file to the PC on a background thread. Size must be known (bytes). */
     public Outgoing sendFile(String name, long size, String mime, InputStream in, SendListener l) {
-        int id;
-        synchronized (this) {
-            id = nextFileId;
-            nextFileId += 2;
-        }
-        final Outgoing o = new Outgoing(id, name, size, mime, in, l);
-        outgoing.put(id, o);
-        Thread t = new Thread(o::run, "dl-send-" + id);
+        return startOutgoing(new Outgoing(newFileId(), name, size, mime, in, l));
+    }
+
+    /**
+     * A file of a backup (only on a side connection to a PC with {@link Protocol#CAP_BACKUP}): saved in that folder of
+     * the phone's backup on the PC, with that date (unix ms, 0 = not known). {@code in} starts at {@code offset}, what
+     * the PC said it has of it ({@link #backupCheck}); size is the whole file's.
+     */
+    public Outgoing sendBackupFile(String name, long size, String mime, String folder, long modifiedMs, long offset,
+                                   InputStream in, SendListener l) {
+        return startOutgoing(new Outgoing(newFileId(), name, size, mime, in, l, true, folder, modifiedMs, offset));
+    }
+
+    private synchronized int newFileId() {
+        int id = nextFileId;
+        nextFileId += 2;
+        return id;
+    }
+
+    private Outgoing startOutgoing(final Outgoing o) {
+        outgoing.put(o.id, o);
+        Thread t = new Thread(o::run, "dl-send-" + o.id);
         t.setDaemon(true);
         t.start();
         return o;
+    }
+
+    /**
+     * BACKUP_CHECK (CAP_BACKUP): what the PC has of each file (at most {@link Protocol#BACKUP_CHECK_MAX}): its size
+     * when it's there, the length of a part it can go on from, or 0. Blocks; IOException when the connection ends or
+     * no answer comes in time. Not on the reader thread.
+     */
+    public long[] backupCheck(String[] folders, String[] names, long[] sizes, int timeoutMs) throws IOException {
+        int n = names.length;
+        if (n > Protocol.BACKUP_CHECK_MAX) throw new IllegalArgumentException("too many files: " + n);
+        int req;
+        synchronized (this) {
+            req = nextCheck++;
+        }
+        ByteWriter w = new ByteWriter(16 + n * 64).u8(Protocol.BACKUP_CHECK).i32(req).u16(n);
+        for (int i = 0; i < n; i++) w.str(folders[i]).str(names[i]).u64(sizes[i]);
+        long[][] slot = new long[1][];
+        checks.put(req, slot);
+        enqueue(w.toByteArray(), false);
+        long until = System.currentTimeMillis() + timeoutMs;
+        synchronized (slot) {
+            while (slot[0] == null && !closed) {
+                long left = until - System.currentTimeMillis();
+                if (left <= 0) break;
+                try {
+                    slot.wait(Math.min(left, 500));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+        checks.remove(req);
+        long[] have = slot[0];
+        if (have == null) throw new IOException(closed ? "connection lost" : "no answer from the PC");
+        if (have.length != n) throw new IOException("the PC answered for " + have.length + " of " + n + " files");
+        return have;
+    }
+
+    /** The backup is over (CAP_BACKUP): files sent this time, their bytes, and those that couldn't be sent. */
+    public void backupEnd(int files, long bytes, int failed) {
+        enqueue(new ByteWriter(17).u8(Protocol.BACKUP_END).u32(files).u64(bytes).u32(failed).toByteArray(), false);
     }
 
     // =================================================================== queue
@@ -646,6 +750,15 @@ public final class HostConnection implements Closeable {
     }
 
     public void pauseStream() { enqueue(ByteWriter.msg(Protocol.STREAM_PAUSE), false); }
+
+    /** keepSound: the picture stops, the PC's sound goes on (PCs with CAP_SOUND_PAUSED; older ones stop both). */
+    public void pauseStream(boolean keepSound) {
+        if (!keepSound) {
+            pauseStream();
+            return;
+        }
+        enqueue(new ByteWriter(2).u8(Protocol.STREAM_PAUSE).u8(Protocol.PAUSE_KEEP_SOUND).toByteArray(), false);
+    }
 
     public void resumeStream() { enqueue(ByteWriter.msg(Protocol.STREAM_RESUME), false); }
 
@@ -859,6 +972,9 @@ public final class HostConnection implements Closeable {
             listener.onIncomingFileDone(in.id, Protocol.FD_ERROR, "connection lost");
         }
         for (Outgoing o : new ArrayList<>(outgoing.values())) o.connectionClosed();
+        for (long[][] slot : new ArrayList<>(checks.values())) {
+            synchronized (slot) { slot.notifyAll(); }
+        }
         listener.onClosed(info);
     }
 }

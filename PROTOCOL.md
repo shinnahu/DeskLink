@@ -131,7 +131,7 @@ host's own default gateway address (some routers pass connections from the inter
 ### Auth
 | type | name | dir | payload |
 |---|---|---|---|
-| 0x01 | AUTH | C→H | `deviceId[16] token[32] str deviceName u16 clientVersion(=1)` |
+| 0x01 | AUTH | C→H | `deviceId[16] token[32] str deviceName u16 clientVersion(=1)` then, optionally, `u8 flags` (bit0 SIDE: a side connection, see below; clients 2.17+, only for a backup) |
 | 0x02 | PAIR_REQUEST | C→H | `commit[32] str deviceName str deviceModel` |
 | 0x03 | PAIR_REVEAL | C→H | `nonceC[32]` |
 | 0x04 | STATUS_QUERY | C→H | `deviceId[16] token[32]` |
@@ -153,7 +153,17 @@ u8 remoteFlags                            // only with capability KNOCK: what re
 ```
 capabilities: `1 CTRL_ALT_DEL, 2 FILES, 4 CLIPBOARD, 8 SERVICE_MODE (lock screen / UAC visible), 16 KNOCK, 32 REL_MOUSE,
 64 ALL_SCREENS` (monitor `0xFE` shows every screen at once), `128 AUDIO` (the PC's sound, see "Sound" below; host 2.7+),
-`256 SCREENSHOT` (see "Screenshots" below; host 2.8+), `512 PASTE` (`PASTE` below; host 2.10+).
+`256 SCREENSHOT` (see "Screenshots" below; host 2.8+), `512 PASTE` (`PASTE` below; host 2.10+), `1024 SOUND_PAUSED`
+(`STREAM_PAUSE` may keep the sound; host 2.12+), `2048 BACKUP` (side connections and backups, see "Backups" below;
+host 2.12+).
+
+Side connections (host 2.12+): an `AUTH` with flag SIDE starts a connection for a phone's backup beside the remote
+session. It doesn't replace the remote session of that phone, nor is it replaced by one; it isn't turned away with
+`BUSY` while another phone controls the PC; it doesn't count as the PC being in use (`STATUS_RESULT`, the "Shared
+with …" pill). A newer side connection of the same phone replaces the older one (`BYE 2`). On it the host takes only
+`FILE_*`, `BACKUP_*`, `PING`/`PONG`, `CLIENT_LOG` and `BYE`; anything else is ignored (no input, clipboard, picture or
+sound). A host before 2.12 ignores the flag and takes the connection as a remote session, so a client sends it only
+where that does no harm: not while it has a remote session open to a PC without `BACKUP`.
 
 remoteFlags: `1 IPV4` (the router forwards the port; the public address is in the list), `2 IPV6` (the router's IPv6
 firewall lets connections through), `4 IPV6_MAYBE` (public IPv6, router can't say), `8 NO_UPNP` (no router answered, or
@@ -164,7 +174,7 @@ the PC). Older clients stop reading after the addresses.
 | type | name | dir | payload |
 |---|---|---|---|
 | 0x10 | STREAM_START | C→H | `u8 monitor(0xFF=primary, 0xFE=all screens) u16 maxWidth u16 maxHeight u8 maxFps u32 bitrateKbps(0=auto) u8 flags(bit0 clipboard sync, bit1 sound: only with capability AUDIO)` then, optionally, `u16 decoderMaxWidth u16 decoderMaxHeight` (the largest picture the client decodes; all-screens pictures stay within it) |
-| 0x11 | STREAM_PAUSE | C→H | — (app went to background: stop video, keep connection) |
+| 0x11 | STREAM_PAUSE | C→H | optionally `u8 flags` (bit0 KEEP_SOUND: only with capability `SOUND_PAUSED`) — app went to background: stop video, keep connection; with KEEP_SOUND the sound goes on (the phone locked, playing the PC's music) |
 | 0x12 | STREAM_RESUME | C→H | — (host sends keyframe + cursor shape/state) |
 | 0x13 | FRAME_ACK | C→H | `u32 frameId` (acks every frame ≤ id) |
 | 0x14 | KEYFRAME_REQUEST | C→H | — |
@@ -201,8 +211,8 @@ Video rules
 | 0x96 | AUDIO_DATA | H→C | `u64 timestampUs tail frame` (one raw AAC frame, 1024 samples per channel, no ADTS header) |
 
 * The host sends the PC's sound while the client asked for it (flag bit1 in STREAM_START or SET_OPTIONS) and the
-  stream isn't paused: what the default sound output plays (loopback), AAC-LC stereo at 128 kbps, 48 kHz (44.1 kHz
-  when Windows won't convert to 48).
+  stream isn't paused, or was paused with KEEP_SOUND (host 2.12+): what the default sound output plays (loopback),
+  AAC-LC stereo at 128 kbps, 48 kHz (44.1 kHz when Windows won't convert to 48).
 * `AUDIO_FORMAT` precedes the first frame, and comes again whenever the sound starts over: STREAM_START or RESUME,
   sound turned on, another default output on the PC. Codec 0 says the PC has no sound output right now (its only
   speakers were a monitor's that's off, say); the host keeps looking and sends a real format once there is one.
@@ -266,7 +276,7 @@ drops it, as it drops any CLIPBOARD from the host.
 ### Files (either direction; client-created ids are odd, host-created ids are even)
 | type | name | dir | payload |
 |---|---|---|---|
-| 0x40 | FILE_BEGIN | ↔ | `u32 id u64 size str name str mime` then, from the host only and only when not 0, `u8 kind` (0 a file, 1 a screenshot that was asked for; older clients stop reading after `mime`) |
+| 0x40 | FILE_BEGIN | ↔ | `u32 id u64 size str name str mime` then, only when not 0, `u8 kind`: from the host 1 (a screenshot that was asked for; older clients stop reading after `mime`), from the client 2 (BACKUP, only with capability `BACKUP`), followed by `str folder u64 modifiedMs u64 offset` (see "Backups") |
 | 0x41 | FILE_DATA | ↔ | `u32 id tail bytes` (≤ 256 KiB per message) |
 | 0x42 | FILE_END | ↔ | `u32 id` |
 | 0x43 | FILE_CANCEL | ↔ | `u32 id` (sender aborts, or receiver rejects) |
@@ -274,8 +284,26 @@ drops it, as it drops any CLIPBOARD from the host.
 | 0x45 | FILE_DONE | ↔ | `u32 id u8 status(0 ok 1 error 2 cancelled) str info` (receiver → sender; host puts the saved path in info) |
 | 0x46 | FILE_REQUEST | C→H | — host opens a Windows "pick files" dialog on the PC desktop and sends the chosen files |
 | 0x47 | FILE_REQUEST_NONE | H→C | — the dialog was cancelled |
+| 0x48 | BACKUP_CHECK | C→H | `u32 req u16 n` then n × `str folder str name u64 size` (n ≤ 200; capability `BACKUP`) |
+| 0x49 | BACKUP_STATE | H→C | `u32 req u16 n` then n × `u64 have`: `size` the PC has that file, less: a part it can go on from, 0: nothing |
+| 0x4A | BACKUP_END | C→H | `u32 files u64 bytes u32 failed` — the backup is over (files and bytes sent this time, files left out) |
 
 Sound and video always have priority over file data on the wire.
+
+### Backups (capability `BACKUP`, host 2.12+; clients 2.17+, on a side connection)
+* A backup file goes to `<Pictures>\DeskLink backup\<the phone's name at pairing>\<folder>\<name>`: `folder` is where it
+  is on the phone, `/` between the parts (`DCIM/Camera`), each part made safe for Windows. A path longer than 240
+  characters loses the phone's outer folders first, then the end of the name (not its extension). When Windows has
+  moved Pictures into OneDrive, it's `<the user's folder>\Pictures` instead. Tests (`--data`): `<data>\backup`.
+* The file gets `modifiedMs` (unix ms; 0 = not known) as its created and modified dates.
+* `BACKUP_CHECK`: a file the PC has is one there under its name, or one of the `name (2).ext` that another file of the
+  same name got, with the same size. Else the length of its part, if there is one, or 0.
+* While a backup file comes, it's a hidden part next to where it goes (`.dl-<hash of name and size>.part`). The part
+  stays when the connection drops or the client cancels the file; `FILE_BEGIN`'s `offset` is where its data starts,
+  and must be the part's length (else the part is dropped and the file fails: the client asks again). `FILE_PROGRESS`
+  counts from the file's start, the offset included. A part as long as the file, or longer, is dropped at the check.
+* No notice per backup file on the PC. After `BACKUP_END` with `files` > 0 the PC shows one notice ("Backup from
+  <phone>: N photos and videos saved"), which opens the phone's folder.
 
 ### Housekeeping
 | type | name | dir | payload |

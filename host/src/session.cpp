@@ -15,11 +15,12 @@ static constexpr size_t kPhoneLogMax = 400;    // bytes of one line
 static constexpr size_t kPasteMax = 1024 * 1024;  // bytes, as the clipboard's
 static constexpr uint64_t kPasteApartMs = 500;    // pastes closer than this don't share the clipboard (see PostPaste)
 
-Session::Session(std::unique_ptr<SecureChannel> ch, PairedDevice dev) : ch_(std::move(ch)), dev_(std::move(dev)) {
+Session::Session(std::unique_ptr<SecureChannel> ch, PairedDevice dev, bool side)
+    : ch_(std::move(ch)), dev_(std::move(dev)), side_(side) {
   lastRecv_ = NowMs();
   streamer_ = std::make_unique<Streamer>(this);
   audio_ = std::make_unique<AudioStreamer>([this](Bytes&& m) { SendAudio(std::move(m)); });
-  files_ = std::make_unique<FileReceiver>(this);
+  files_ = std::make_unique<FileReceiver>(this, dev_.name);
 }
 
 Session::~Session() { Log("session %s: destroyed", dev_.name.c_str()); }
@@ -32,7 +33,7 @@ void Session::Start() {
   auto self = shared_from_this();
   std::thread([self] { self->WriterLoop(); }).detach();
   std::thread([self] { self->ReaderLoop(); }).detach();
-  Log("session %s: started from %s", dev_.name.c_str(), ch_->peer().c_str());
+  Log("session %s: started from %s%s", dev_.name.c_str(), ch_->peer().c_str(), side_ ? " (side connection: backup)" : "");
 }
 
 void Session::Stop(uint8_t byeReason, const std::string& msgText) {
@@ -208,9 +209,11 @@ void Session::ReaderLoop() {
 void Session::Cleanup() {
   audio_->Stop();
   streamer_->Stop();
-  InputEvent rel;
-  rel.type = InputEvent::ReleaseAll;
-  g_app->input.Post(std::move(rel));
+  if (!side_) {  // (a side connection holds no keys: releasing them would let go of what the remote session holds)
+    InputEvent rel;
+    rel.type = InputEvent::ReleaseAll;
+    g_app->input.Post(std::move(rel));
+  }
   files_->CancelAll();
   outCv_.notify_all();
   // give the writer a moment to flush BYE
@@ -246,6 +249,23 @@ void Session::PostPaste(const std::string& text) {
 
 void Session::Handle(const Bytes& m) {
   Reader r(m.data() + 1, m.size() - 1);
+  if (side_) {  // a backup: files only, nothing of the screen, sound, input or clipboard
+    switch (m[0]) {
+      case msg::FILE_START:
+      case msg::FILE_DATA:
+      case msg::FILE_FINISH:
+      case msg::FILE_CANCEL:
+      case msg::BACKUP_CHECK:
+      case msg::BACKUP_END:
+      case msg::PING:
+      case msg::PONG:
+      case msg::CLIENT_LOG:
+      case msg::BYE:
+        break;
+      default:
+        return;
+    }
+  }
   switch (m[0]) {
     case msg::STREAM_START: {
       StreamParams p;
@@ -267,6 +287,7 @@ void Session::Handle(const Bytes& m) {
       clipboardSync_ = (flags & sflag::CLIPBOARD) != 0;
       audioWanted_ = (flags & sflag::AUDIO) != 0;
       streamPaused_ = false;
+      soundWhilePaused_ = false;
       Log("session %s: STREAM_START monitor=%d max=%dx%d fps=%d kbps=%d clip=%d audio=%d decoder=%dx%d",
           dev_.name.c_str(), p.monitor, p.maxW, p.maxH, p.maxFps, p.kbps, (int)clipboardSync_, (int)audioWanted_,
           p.decW, p.decH);
@@ -276,13 +297,20 @@ void Session::Handle(const Bytes& m) {
       if (clipboardSync_) ui::RequestClipboardPush();
       break;
     }
-    case msg::STREAM_PAUSE:
+    case msg::STREAM_PAUSE: {
+      // Phones from 2.17 may keep the sound (pauseflag::KEEP_SOUND): locked or in another app, playing the PC's
+      // music. The picture stops either way.
+      uint8_t pf = r.n - r.pos >= 1 ? r.u8() : 0;
       streamPaused_ = true;
+      soundWhilePaused_ = (pf & pauseflag::KEEP_SOUND) != 0;
       streamer_->Pause();
-      audio_->Stop();
+      if (!soundWhilePaused_ || !audioWanted_) audio_->Stop();
+      if (soundWhilePaused_) Log("session %s: STREAM_PAUSE, the sound goes on", dev_.name.c_str());
       break;
+    }
     case msg::STREAM_RESUME:
       streamPaused_ = false;
+      soundWhilePaused_ = false;
       // A phone that connected while in the background may RESUME without ever sending START.
       if (!streamer_->running()) {
         Log("session %s: RESUME before START, starting with defaults", dev_.name.c_str());
@@ -306,7 +334,7 @@ void Session::Handle(const Bytes& m) {
         clipboardSync_ = (flags & sflag::CLIPBOARD) != 0;
         if (clipboardSync_ && !was) ui::RequestClipboardPush();
         audioWanted_ = (flags & sflag::AUDIO) != 0;
-        if (audioWanted_ && streamer_->running() && !streamPaused_) audio_->Start();
+        if (audioWanted_ && streamer_->running() && (!streamPaused_ || soundWhilePaused_)) audio_->Start();
         else if (!audioWanted_) audio_->Stop();
       }
       break;
@@ -417,7 +445,18 @@ void Session::Handle(const Bytes& m) {
       uint32_t id = r.u32();
       uint64_t size = r.u64();
       std::string name = r.str(), mime = r.str();
-      if (r.ok) files_->OnBegin(id, size, name, mime);
+      if (!r.ok) break;
+      // phones from 2.17: a file of their backup, with its folder, its date and where its data starts
+      uint8_t kind = r.n - r.pos >= 1 ? r.u8() : fkind::FILE;
+      if (kind == fkind::BACKUP) {
+        BackupFile b;
+        b.folder = r.str();
+        b.modifiedMs = r.u64();
+        b.offset = r.u64();
+        if (r.ok) files_->OnBegin(id, size, name, mime, &b);
+        break;
+      }
+      files_->OnBegin(id, size, name, mime);
       break;
     }
     case msg::FILE_DATA: {
@@ -461,6 +500,33 @@ void Session::Handle(const Bytes& m) {
     case msg::FILE_REQUEST:
       PickAndSendFiles(shared_from_this(), true);
       break;
+    case msg::BACKUP_CHECK: {
+      uint32_t req = r.u32();
+      uint16_t n = r.u16();
+      std::vector<BackupEntry> es;
+      es.reserve(n);
+      for (uint16_t i = 0; i < n && r.ok; i++) {
+        BackupEntry e;
+        e.folder = r.str();
+        e.name = r.str();
+        e.size = r.u64();
+        es.push_back(std::move(e));
+      }
+      if (!r.ok) break;
+      std::vector<uint64_t> have = files_->Check(es);
+      Writer w(msg::BACKUP_STATE);
+      w.u32(req).u16((uint16_t)have.size());
+      for (uint64_t h : have) w.u64(h);
+      SendControl(std::move(w.b));
+      break;
+    }
+    case msg::BACKUP_END: {
+      uint32_t files = r.u32();
+      uint64_t bytes = r.u64();
+      uint32_t failed = r.u32();
+      if (r.ok) files_->BackupEnded(files, bytes, failed);
+      break;
+    }
     case msg::PING: {
       Writer w(msg::PONG);
       w.u64(r.u64());

@@ -47,6 +47,12 @@ enum : UINT {
   WM_REFRESH,
   WM_CLIP_PUSH,
   WM_FILE_RX,
+  WM_BACKUP_DONE,
+};
+
+// A notice that opens a folder when clicked (a phone's backup is over).
+struct FolderNotice {
+  std::wstring title, text, folder;
 };
 
 enum : UINT {
@@ -71,6 +77,7 @@ ULONG_PTR g_gdip = 0;
 HICON g_iconSmall = nullptr, g_iconBig = nullptr;
 std::wstring g_device;
 std::wstring g_lastFile;
+std::wstring g_lastFolder;  // the last notice was a backup's: clicking it opens this folder
 DWORD g_ourClipSeq = 0;
 UINT g_cfExclude = 0;
 std::vector<Bytes> g_menuDevices;
@@ -310,8 +317,7 @@ void HandleCommand(UINT cmd) {
             IDYES) {
           Bytes id = g_menuDevices[i];
           g_app->cfg.RemoveDevice(id);
-          if (auto s = g_app->Active())
-            if (s->device().id == id) s->Stop(bye::STOPPED_ON_PC, "This phone was unlinked on the PC");
+          g_app->StopDevice(id, bye::STOPPED_ON_PC, "This phone was unlinked on the PC");
         }
       }
   }
@@ -833,7 +839,8 @@ LRESULT CALLBACK MainProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
           ShowTrayMenu();
           break;
         case NIN_BALLOONUSERCLICK:
-          if (!g_lastFile.empty()) OpenReceivedFolder(g_lastFile);
+          if (!g_lastFolder.empty()) ShellExecuteW(nullptr, L"open", g_lastFolder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+          else if (!g_lastFile.empty()) OpenReceivedFolder(g_lastFile);
           break;
       }
       return 0;
@@ -917,9 +924,17 @@ LRESULT CALLBACK MainProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     case WM_FILE_RX: {
       auto* p = (std::wstring*)lp;
       g_lastFile = *p;
+      g_lastFolder.clear();
       delete p;
       std::wstring name = g_lastFile.substr(g_lastFile.find_last_of(L'\\') + 1);
       Balloon(S(S_FILE_RECEIVED), name);
+      return 0;
+    }
+    case WM_BACKUP_DONE: {
+      auto* n = (FolderNotice*)lp;
+      g_lastFolder = n->folder;
+      Balloon(n->title, n->text);
+      delete n;
       return 0;
     }
     case WM_REFRESH:
@@ -956,6 +971,7 @@ void Post(UINT msg, WPARAM wp, LPARAM lp) {
       delete w;
     }
     if (msg == WM_BALLOON) delete (std::pair<std::wstring, std::wstring>*)lp;
+    if (msg == WM_BACKUP_DONE) delete (FolderNotice*)lp;
   }
 }
 
@@ -1098,6 +1114,10 @@ void SetClipboardText(const std::string& utf8, std::function<void(bool)> done) {
 }
 void RequestClipboardPush() { Post(WM_CLIP_PUSH, 0, 0); }
 void FileReceived(const std::wstring& path) { Post(WM_FILE_RX, 0, (LPARAM) new std::wstring(path)); }
+void BackupFinished(const std::wstring& folder, const std::wstring& device, uint32_t files) {
+  std::wstring text = files == 1 ? S(S_BACKUP_DONE_ONE) : Fmt(S_BACKUP_DONE_MANY, std::to_wstring(files));
+  Post(WM_BACKUP_DONE, 0, (LPARAM) new FolderNotice{Fmt(S_BACKUP_DONE_TITLE, device), text, folder});
+}
 void Notify(const std::wstring& title, const std::wstring& text) {
   Post(WM_BALLOON, 0, (LPARAM) new std::pair<std::wstring, std::wstring>(title, text));
 }

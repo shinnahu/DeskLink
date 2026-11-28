@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.desklink.core.BackupRun;
 import com.desklink.core.Connector;
 import com.desklink.core.Discovery;
 import com.desklink.core.Hex;
@@ -40,6 +41,8 @@ public final class CliClient {
                 + "  status    <host> [port]                        STATUS_QUERY probe\n"
                 + "  connect   <host> [port] [seconds] [out.h264]   stream video, ack frames, print stats\n"
                 + "  send-file <host> <path>                        upload a file to the PC\n"
+                + "  backup    <host> <folder> [stopAfterMB]        back up a folder's files like a phone's photos\n"
+                + "                                                 (side connection; stop part way to try going on)\n"
                 + "  get-file  <host> [seconds]                     ask the PC to pick a file and download it here\n"
                 + "  type      <host> <text>                        type text (TEXT message)\n"
                 + "  clip      <host> <text>                        set the PC clipboard\n"
@@ -63,6 +66,7 @@ public final class CliClient {
                 case "status": status(arg(args, 1), intArg(args, 2, -1)); break;
                 case "connect": connect(arg(args, 1), intArg(args, 2, -1), intArg(args, 3, 10), args.length > 4 ? args[4] : null); break;
                 case "send-file": sendFile(arg(args, 1), arg(args, 2)); break;
+                case "backup": backup(arg(args, 1), arg(args, 2), intArg(args, 3, 0)); break;
                 case "get-file": getFile(arg(args, 1), intArg(args, 2, 60)); break;
                 case "type": simple(arg(args, 1), c -> c.text(joinFrom(args, 2))); break;
                 case "clip": simple(arg(args, 1), c -> c.sendClipboard(joinFrom(args, 2))); break;
@@ -201,6 +205,65 @@ public final class CliClient {
         System.out.println(size + " bytes in " + ms + " ms (" + (size * 8 / ms) + " kbps)");
         c.disconnect();
         Thread.sleep(300);
+    }
+
+    /**
+     * The phone's backup, from a folder of this PC: its files go as the phone's photos would, each in its folder
+     * (relative to the one given), with its date. With stopAfterMB it stops once that much went this time (the PC
+     * keeps the part of the file it was sending): the next run goes on from there.
+     */
+    private static void backup(String host, String folder, int stopAfterMB) throws Exception {
+        final PairedHost h = credsFor(host, -1);
+        File root = new File(folder);
+        if (!root.isDirectory()) throw new IOException("not a folder: " + folder);
+        List<BackupRun.Item> items = new ArrayList<>();
+        listFiles(root, "", items);
+        System.out.println(items.size() + " files");
+        final String dev = "CLI on " + localName();
+        final BackupRun[] run = new BackupRun[1];
+        final long stopAt = stopAfterMB * 1024L * 1024L;
+        final AtomicLong read = new AtomicLong(); // read from the files this time: past stopAt, the backup is stopped
+        run[0] = new BackupRun(items, (item, offset) -> {
+            File f = (File) item.ref;
+            FileInputStream in = new FileInputStream(f);
+            in.getChannel().position(offset);
+            java.io.InputStream counted = new java.io.FilterInputStream(in) {
+                @Override public int read(byte[] b, int off, int len) throws IOException {
+                    int n = super.read(b, off, len);
+                    if (n > 0 && stopAt > 0 && read.addAndGet(n) >= stopAt && !run[0].stopped()) {
+                        System.out.println("stopping here, part way into " + item.name);
+                        run[0].stop();
+                    }
+                    return n;
+                }
+            };
+            return new BackupRun.Opened(counted, f.length());
+        }, new BackupRun.Link() {
+            @Override public HostConnection connect() throws IOException {
+                return HostConnection.connect(h, dev, null, 8000, Protocol.AUTH_SIDE);
+            }
+
+            @Override public boolean allowed() { return true; }
+        }, s -> {
+            System.out.printf("%s: %d of %d files, %d of %d MB; sent %d (%d MB), failed %d%s%n", s.phase, s.done, s.files,
+                    s.bytesDone >> 20, s.bytes >> 20, s.sent, s.sentBytes >> 20, s.failed,
+                    s.problem != null ? " (" + s.problem + ")" : "");
+        });
+        long t0 = System.currentTimeMillis();
+        BackupRun.Outcome o = run[0].run();
+        long ms = Math.max(1, System.currentTimeMillis() - t0);
+        System.out.println("OUTCOME " + o + " in " + ms + " ms");
+        Thread.sleep(500);
+    }
+
+    private static void listFiles(File dir, String rel, List<BackupRun.Item> out) {
+        File[] fs = dir.listFiles();
+        if (fs == null) return;
+        java.util.Arrays.sort(fs);
+        for (File f : fs) {
+            if (f.isDirectory()) listFiles(f, rel.isEmpty() ? f.getName() : rel + "/" + f.getName(), out);
+            else out.add(new BackupRun.Item(rel, f.getName(), guessMime(f.getName()), f.length(), f.lastModified(), f));
+        }
     }
 
     private static void getFile(String host, int seconds) throws Exception {

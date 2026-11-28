@@ -17,6 +17,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
@@ -38,12 +39,15 @@ final class SettingsScreen {
 
         /** The ← at the top. */
         void closeSettings();
+
+        /** The PC of the session the page is open in (a backup goes to it), or null. */
+        default String sessionHostId() { return null; }
     }
 
     static final int K_POINTER_SPEED = 1, K_INVERT_SCROLL = 2, K_PREDICTIVE = 3, K_PAD_LABELS = 4, K_PAD_COLORS = 5,
             K_QUALITY = 6, K_FULL_SCREEN = 7, K_STATS = 8, K_CLIPBOARD = 9, K_APP_LOCK = 10, K_PAD_TYPE = 11,
             K_CAMERA_SPEED = 12, K_MODS_HOLD = 14, K_GLIDE = 15, K_PAD_LINES = 16, K_PAD_OPACITY = 17,
-            K_STICK_LOOK = 18, K_ARROW_COLOR = 19, K_NOTES = 20, K_SOUND = 21;
+            K_STICK_LOOK = 18, K_ARROW_COLOR = 19, K_NOTES = 20, K_SOUND = 21, K_STAY = 22;
 
     private static final int MATCH = ViewGroup.LayoutParams.MATCH_PARENT, WRAP = ViewGroup.LayoutParams.WRAP_CONTENT;
 
@@ -63,6 +67,11 @@ final class SettingsScreen {
     private final GamepadEditor editor;
     private final int text, dim, accent;
     private final LinearLayout col;
+    // the backup's row: what it says changes while a backup runs
+    private TextView backupSum, backupStop;
+    private ProgressBar backupBar;
+    private ImageView backupChev;
+    private final BackupService.Watcher backupWatcher = this::showBackup;
 
     SettingsScreen(Activity a, Host host, GamepadEditor editor) {
         this.a = a;
@@ -96,6 +105,16 @@ final class SettingsScreen {
         page.addView(scroll, new LinearLayout.LayoutParams(MATCH, 0, 1f));
         Ui.padForInsets(page, 0);
         view = page;
+        page.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {
+                BackupService.watch(backupWatcher);
+                showBackup();
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) { BackupService.unwatch(backupWatcher); }
+        });
         build();
     }
 
@@ -222,11 +241,20 @@ final class SettingsScreen {
             host.settingChanged(K_SOUND);
         });
 
+        card = section(R.string.set_connection);
+        switchRow(card, R.string.set_stay, a.getString(R.string.set_stay_sum), prefs.stayConnected(), (s, on) -> {
+            prefs.setStayConnected(on);
+            host.settingChanged(K_STAY);
+        });
+
         card = section(R.string.set_clipboard);
         switchRow(card, R.string.menu_clipboard, a.getString(R.string.set_clipboard_sum), prefs.clipboardSync(), (s, on) -> {
             prefs.setClipboardSync(on);
             host.settingChanged(K_CLIPBOARD);
         });
+
+        card = section(R.string.set_backup);
+        backupRow(card);
 
         if (AppLock.supported()) { // Android 10 and later
             card = section(R.string.set_security);
@@ -329,6 +357,71 @@ final class SettingsScreen {
         row.addView(chev, lp);
         row.setOnClickListener(l);
         card.addView(row);
+    }
+
+    /**
+     * Back up photos and videos: tapping it starts a backup (BackupStart). While one runs it says how far it got, with
+     * a bar and Stop; afterwards, when the last one ended.
+     */
+    private void backupRow(LinearLayout card) {
+        LinearLayout row = row();
+        LinearLayout t = new LinearLayout(a);
+        t.setOrientation(LinearLayout.VERTICAL);
+        t.addView(Ui.text(a, a.getString(R.string.set_backup_row), 16, text, false));
+        backupSum = Ui.text(a, "", 13, dim, false);
+        backupSum.setPadding(0, dp(2), 0, 0);
+        t.addView(backupSum);
+        backupBar = new ProgressBar(a, null, android.R.attr.progressBarStyleHorizontal);
+        backupBar.setMax(1000);
+        backupBar.setProgressTintList(ColorStateList.valueOf(accent));
+        backupBar.setIndeterminateTintList(ColorStateList.valueOf(accent));
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(MATCH, WRAP);
+        bl.topMargin = dp(8);
+        t.addView(backupBar, bl);
+        row.addView(t, new LinearLayout.LayoutParams(0, WRAP, 1f));
+        backupStop = Ui.text(a, a.getString(R.string.backup_stop), 14, accent, true);
+        backupStop.setPadding(dp(12), dp(8), dp(4), dp(8));
+        backupStop.setBackground(Ui.ripple(Ui.rounded(Color.TRANSPARENT, dp(8)), dp(8)));
+        backupStop.setClickable(true);
+        backupStop.setFocusable(true);
+        backupStop.setOnClickListener(v -> BackupService.stop(a));
+        LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(WRAP, WRAP);
+        sl.setMarginStart(dp(8));
+        row.addView(backupStop, sl);
+        backupChev = new ImageView(a);
+        backupChev.setImageResource(R.drawable.ic_chevron_right);
+        backupChev.setImageTintList(ColorStateList.valueOf(dim));
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(dp(24), dp(24));
+        cl.setMarginStart(dp(12));
+        row.addView(backupChev, cl);
+        row.setOnClickListener(v -> {
+            if (!BackupService.running()) BackupStart.begin(a, host.sessionHostId());
+        });
+        card.addView(row);
+        showBackup();
+    }
+
+    private void showBackup() {
+        if (backupSum == null) return;
+        boolean on = BackupService.running();
+        com.desklink.core.BackupRun.Status s = BackupService.status();
+        String pc = BackupService.runningPc();
+        if (on) {
+            backupSum.setText(s == null ? a.getString(R.string.backup_looking)
+                    : a.getString(R.string.backup_to, pc) + " · " + BackupService.line(a, s, pc));
+            backupBar.setIndeterminate(s == null || (s.done == 0 && s.phase != com.desklink.core.BackupRun.Phase.SENDING));
+            if (s != null && s.bytes > 0) backupBar.setProgress((int) (s.bytesDone * 1000 / s.bytes));
+        } else if (prefs.lastBackupAt() > 0) {
+            String when = android.text.format.DateUtils.formatDateTime(a, prefs.lastBackupAt(),
+                    android.text.format.DateUtils.FORMAT_SHOW_DATE | android.text.format.DateUtils.FORMAT_ABBREV_MONTH);
+            backupSum.setText(a.getString(R.string.set_backup_last, when,
+                    java.text.NumberFormat.getIntegerInstance().format(prefs.lastBackupFiles()), prefs.lastBackupPc()));
+        } else {
+            backupSum.setText(R.string.set_backup_sum);
+        }
+        backupBar.setVisibility(on ? View.VISIBLE : View.GONE);
+        backupStop.setVisibility(on ? View.VISIBLE : View.GONE);
+        backupChev.setVisibility(on ? View.GONE : View.VISIBLE);
     }
 
     /** One choice out of a few, all on show. */

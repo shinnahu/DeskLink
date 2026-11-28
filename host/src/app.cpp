@@ -43,6 +43,35 @@ void App::ActivateSession(const std::shared_ptr<Session>& s) {
   ui::SessionStarted(s->device().name);
 }
 
+void App::ActivateSide(const std::shared_ptr<Session>& s) {
+  std::vector<std::shared_ptr<Session>> old;
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    for (auto it = sides_.begin(); it != sides_.end();) {
+      if ((*it)->device().id == s->device().id || !(*it)->alive()) {
+        old.push_back(*it);
+        it = sides_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+    sides_.push_back(s);
+  }
+  for (auto& o : old)
+    if (o.get() != s.get()) o->Stop(bye::REPLACED, "Replaced by a newer connection");
+}
+
+void App::StopDevice(const Bytes& id, uint8_t reason, const std::string& msg) {
+  std::vector<std::shared_ptr<Session>> of;
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    if (active_ && active_->device().id == id) of.push_back(active_);
+    for (auto& s : sides_)
+      if (s->device().id == id) of.push_back(s);
+  }
+  for (auto& s : of) s->Stop(reason, msg);
+}
+
 void App::OnSessionEnded(Session* s) {
   bool wasActive = false;
   {
@@ -50,6 +79,12 @@ void App::OnSessionEnded(Session* s) {
     if (active_.get() == s) {
       active_.reset();
       wasActive = true;
+    }
+    for (auto it = sides_.begin(); it != sides_.end(); ++it) {
+      if (it->get() == s) {
+        sides_.erase(it);
+        break;
+      }
     }
   }
   if (wasActive) ui::SessionEnded();
@@ -90,7 +125,7 @@ int App::PairingSecondsLeft() {
 
 uint32_t App::Capabilities() const {
   uint32_t c = caps::FILES | caps::CLIPBOARD | caps::KNOCK | caps::REL_MOUSE | caps::ALL_SCREENS | caps::AUDIO |
-               caps::SCREENSHOT | caps::PASTE;
+               caps::SCREENSHOT | caps::PASTE | caps::SOUND_PAUSED | caps::BACKUP;
   if (g_opt.systemMode) c |= caps::CTRL_ALT_DEL | caps::SERVICE_MODE;
   return c;
 }

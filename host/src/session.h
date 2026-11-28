@@ -10,13 +10,16 @@
 
 // One authenticated phone connection. Owns a reader thread (decrypt + dispatch) and a writer
 // thread (three queues: sound first, then control/video, then file data; periodic PING).
+// A side connection (side = true, authflag::SIDE) is a phone's backup beside its remote session: it takes only file
+// and backup messages, and never touches the screen, the sound, the input or the clipboard.
 class Session : public StreamSink, public std::enable_shared_from_this<Session> {
  public:
-  Session(std::unique_ptr<SecureChannel> ch, PairedDevice dev);
+  Session(std::unique_ptr<SecureChannel> ch, PairedDevice dev, bool side = false);
   ~Session() override;
 
   SecureChannel& channel() { return *ch_; }
   const PairedDevice& device() const { return dev_; }
+  bool side() const { return side_; }
   bool alive() const { return !stopping_; }
   uint64_t lastRecvMs() const { return lastRecv_; }
 
@@ -51,6 +54,7 @@ class Session : public StreamSink, public std::enable_shared_from_this<Session> 
 
   std::unique_ptr<SecureChannel> ch_;
   PairedDevice dev_;
+  const bool side_;
 
   std::mutex qmu_;
   std::condition_variable qcv_;
@@ -63,6 +67,7 @@ class Session : public StreamSink, public std::enable_shared_from_this<Session> 
   std::unique_ptr<Streamer> streamer_;
   std::unique_ptr<AudioStreamer> audio_;
   bool audioWanted_ = false, streamPaused_ = false;  // (reader thread only)
+  bool soundWhilePaused_ = false;  // the pause keeps the sound (pauseflag::KEEP_SOUND; reader thread only)
   uint64_t lastPasteMs_ = 0;                         // (reader thread only)
   uint64_t phoneLogMinute_ = 0;  // CLIENT_LOG lines written this minute, at most kPhoneLogPerMinute (reader thread)
   int phoneLogLines_ = 0;

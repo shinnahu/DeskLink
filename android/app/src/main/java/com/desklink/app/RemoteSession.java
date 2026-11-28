@@ -56,6 +56,9 @@ final class RemoteSession {
     private volatile int gen;
     private int attempt;
     private boolean started, stopped, background, everConnected, weak, connecting, needReconnect;
+    // Settings → Stay connected, while in the background: the connection stays (and comes back by itself), and the
+    // PC's sound goes on (keepSound, to PCs that can: CAP_SOUND_PAUSED)
+    private boolean stay, keepSound;
 
     private final Runnable retry = () -> connectNow();
     private final Runnable bgDisconnect = this::backgroundDisconnect;
@@ -121,25 +124,41 @@ final class RemoteSession {
         if (conn == null && !connecting) connectNow();
     }
 
-    void onBackground() {
+    void onBackground() { onBackground(false, false); }
+
+    /**
+     * The screen went to the background. stay (Settings → Stay connected): the connection stays and comes back by
+     * itself when it drops, and with keepSound the PC's sound goes on; otherwise it's closed after a minute.
+     */
+    void onBackground(boolean stay, boolean keepSound) {
         background = true;
-        main.removeCallbacks(tick); // no periodic work while in the background
+        this.stay = stay;
+        this.keepSound = keepSound;
+        if (!stay) main.removeCallbacks(tick); // no periodic work while in the background
         if (stopped || state == State.ENDED || state == State.FAILED) return; // nothing to pause; keep the message
-        if (conn == null && !connecting) {
+        if (conn == null && !connecting && !stay) {
             main.removeCallbacks(retry); // reconnecting resumes when we come back
             needReconnect = true;
         }
         HostConnection c = conn;
         if (c != null) {
             c.releaseAll();
-            c.pauseStream();
+            pause(c);
         }
         main.removeCallbacks(bgDisconnect);
-        main.postDelayed(bgDisconnect, BACKGROUND_DISCONNECT_MS);
+        if (!stay) main.postDelayed(bgDisconnect, BACKGROUND_DISCONNECT_MS);
+    }
+
+    /** The picture stops; the sound too, unless it's to go on (and the PC can). */
+    private void pause(HostConnection c) {
+        Messages.HostInfo i = c.hostInfo();
+        c.pauseStream(keepSound && i != null && i.can(Protocol.CAP_SOUND_PAUSED));
     }
 
     void onForeground() {
         background = false;
+        stay = false;
+        keepSound = false;
         main.removeCallbacks(bgDisconnect);
         if (stopped || state == State.FAILED || state == State.ENDED) return;
         main.removeCallbacks(tick);
@@ -281,9 +300,9 @@ final class RemoteSession {
         setState(State.WAITING_VIDEO, WAIT_NEW_STREAM, null);
         ui.onConnected(c, background);
         if (background) {
-            c.pauseStream();
+            pause(c);
             main.removeCallbacks(bgDisconnect);
-            main.postDelayed(bgDisconnect, BACKGROUND_DISCONNECT_MS);
+            if (!stay) main.postDelayed(bgDisconnect, BACKGROUND_DISCONNECT_MS);
         }
     }
 
@@ -315,7 +334,7 @@ final class RemoteSession {
     private void onConnectFailed(int myGen, Exception e) {
         connecting = false;
         if (myGen != gen || stopped) return;
-        if (background) {
+        if (background && !stay) {
             needReconnect = true;
             setState(State.LOST, LOST_BACKGROUND, e.getMessage());
             return;
@@ -350,7 +369,7 @@ final class RemoteSession {
                 return;
             }
         }
-        if (background) {
+        if (background && !stay) {
             needReconnect = true;
             setState(State.LOST, LOST_BACKGROUND, null);
             return;
@@ -361,7 +380,7 @@ final class RemoteSession {
 
     private void checkLiveness() {
         HostConnection c = conn;
-        if (c == null || background) {
+        if (c == null || (background && !stay)) {
             if (weak) {
                 weak = false;
                 ui.onWeak(false);

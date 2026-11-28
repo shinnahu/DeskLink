@@ -230,6 +230,8 @@ void Server::HandleConnection(SOCKET s, std::string peer) {
         if (m[0] == msg::AUTH) r.u16();
         uint8_t replyType = m[0] == msg::AUTH ? msg::AUTH_RESULT : msg::STATUS_RESULT;
         if (!r.ok) return;
+        // phones from 2.17: a side connection for a backup (authflag::SIDE), beside the remote session
+        bool side = m[0] == msg::AUTH && r.n - r.pos >= 1 && (r.u8() & authflag::SIDE) != 0;
         PairedDevice d;
         uint8_t st = st::OK;
         if (!g_app->cfg.FindDevice(id, d)) {
@@ -267,7 +269,7 @@ void Server::HandleConnection(SOCKET s, std::string peer) {
           g_app->cfg.TouchDevice(d.id);
           return;
         }
-        if (otherActive) {
+        if (otherActive && !side) {  // (a backup takes nothing from whoever controls the PC)
           SendResult(*ch, msg::AUTH_RESULT, st::BUSY, "In use by " + cur->device().name);
           return;
         }
@@ -289,8 +291,9 @@ void Server::HandleConnection(SOCKET s, std::string peer) {
         for (auto& a : addrs) hi.str(a);
         hi.u8(remote::Flags());  // what works over mobile data (caps::KNOCK)
         if (!ch->Send(hi.b)) return;
-        auto sess = std::make_shared<Session>(std::move(ch), d);
-        g_app->ActivateSession(sess);
+        auto sess = std::make_shared<Session>(std::move(ch), d, side);
+        if (side) g_app->ActivateSide(sess);
+        else g_app->ActivateSession(sess);
         sess->Start();
         return;
       }

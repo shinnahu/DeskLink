@@ -1,5 +1,6 @@
 package com.desklink.app;
 
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assume.assumeTrue;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -153,6 +154,34 @@ public class PreviewShots {
             settle();
             shoot(a, "phone-settings-gaming.png", null);
         }
+    }
+
+    @Test
+    public void settingsBackup() throws Exception {
+        SettingsActivity a = Robolectric.buildActivity(SettingsActivity.class).setup().get();
+        settle();
+        // scrolled to Sound: then Connection (Stay connected), Clipboard and Backup
+        ScrollView sv = find(a.getWindow().getDecorView(), ScrollView.class);
+        TextView header = findText(a.getWindow().getDecorView(), a.getString(R.string.set_sound));
+        assertNotNull(sv);
+        assertNotNull(header);
+        int[] s = new int[2], h = new int[2];
+        sv.getChildAt(0).getLocationInWindow(s);
+        header.getLocationInWindow(h);
+        sv.scrollTo(0, Math.max(0, h[1] - s[1] - Math.round(12 * ctx.getResources().getDisplayMetrics().density)));
+        settle();
+        shoot(a, "phone-settings-backup.png", null);
+        // while a backup runs
+        com.desklink.core.BackupRun.Status st = new com.desklink.core.BackupRun.Status();
+        st.phase = com.desklink.core.BackupRun.Phase.SENDING;
+        st.files = 3456;
+        st.bytes = 8_200_000_000L;
+        st.done = 1234;
+        st.bytesDone = 2_950_000_000L;
+        BackupService.showForPreview("OFFICE-PC", st);
+        settle();
+        shoot(a, "phone-settings-backup-running.png", null);
+        BackupService.showForPreview("", null);
     }
 
     // ------------------------------------------------------------------ a session as if connected

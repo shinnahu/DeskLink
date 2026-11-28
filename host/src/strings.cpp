@@ -47,6 +47,9 @@ static const wchar_t* kEn[S_COUNT] = {
     L"Mobile data: only over IPv6, if the router lets it in",
     L"Mobile data: not possible, your internet company shares your address (CGNAT)",
     L"Mobile data: the router didn't let DeskLink open the way in (UPnP)",
+    L"Backup from %s",
+    L"1 photo or video saved",
+    L"%s photos and videos saved",
 };
 
 static const wchar_t* kEs[S_COUNT] = {
@@ -94,6 +97,9 @@ static const wchar_t* kEs[S_COUNT] = {
     L"Datos móviles: solo por IPv6, si el router lo deja entrar",
     L"Datos móviles: no se puede, tu proveedor de internet comparte tu dirección (CGNAT)",
     L"Datos móviles: el router no dejó que DeskLink abra el acceso (UPnP)",
+    L"Copia de seguridad de %s",
+    L"Se guardó 1 foto o video",
+    L"Se guardaron %s fotos y videos",
 };
 
 const wchar_t* S(StrId id) {

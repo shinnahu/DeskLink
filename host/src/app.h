@@ -22,6 +22,11 @@ class App {
   void ActivateSession(const std::shared_ptr<Session>& s);
   void OnSessionEnded(Session* s);
   void StopActive(uint8_t reason, const std::string& msg);
+  // ---- side connections (a phone's backup): one per phone, beside the active session; a newer one from the same
+  // phone replaces the older one
+  void ActivateSide(const std::shared_ptr<Session>& s);
+  // Stops every connection of one phone (it was unlinked): its remote session and its side connection.
+  void StopDevice(const Bytes& id, uint8_t reason, const std::string& msg);
 
   // ---- pairing mode
   void OpenPairing(int seconds = 600);
@@ -37,6 +42,7 @@ class App {
  private:
   std::mutex mu_;
   std::shared_ptr<Session> active_;
+  std::vector<std::shared_ptr<Session>> sides_;
   uint64_t pairingUntil_ = 0;
 };
 

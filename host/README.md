@@ -1,6 +1,6 @@
 # DeskLink Host (Windows)
 
-Native C++ (Win32 + Direct3D 11 + Media Foundation + WASAPI + WIC + CNG). One 721 KB `.exe`, no runtime to
+Native C++ (Win32 + Direct3D 11 + Media Foundation + WASAPI + WIC + CNG). One 748 KB `.exe`, no runtime to
 install.
 
 ## Pipeline
@@ -62,14 +62,14 @@ WASAPI loopback of the default output (48 kHz 16-bit stereo, converted by Window
 | `main.cpp` | modes: agent (default), `--install`, `--uninstall`, `--service`, self-tests |
 | `server.cpp` | TCP listener, handshake (+ the knock required from the internet), AUTH / STATUS_QUERY / pairing, UDP LAN discovery |
 | `remote.cpp` | mobile data: UPnP on the home router (port forward, IPv6 pinhole), renewed every 30 min; home-vs-internet peers |
-| `session.cpp` | one phone connection: reader + writer threads (video before file data), ping, dispatch; the phone's own log lines (`phone:`, what its video decoder did) |
+| `session.cpp` | one phone connection: reader + writer threads (video before file data), ping, dispatch; the phone's own log lines (`phone:`, what its video decoder did); a side connection (a phone's backup) takes only file messages; a pause may keep the sound |
 | `channel.cpp`, `crypto.cpp` | ECDH P-256 + ECDSA host identity + HKDF + AES-256-GCM (Windows CNG) |
 | `capture.cpp`, `encoder.cpp`, `h264.cpp` | capture, colour conversion, H.264, flow/rate control, cursor |
 | `vdisplay.cpp` | the virtual screen (Parsec VDD) while no monitor is on: added, pinged, taken away |
 | `audio.cpp` | the PC's sound: WASAPI loopback of the default output, AAC by Media Foundation, quiet gate |
 | `screenshot.cpp` | screenshots: the shown picture at full size as a PNG (WIC), sent like a file |
 | `input.cpp`, `desktop.cpp` | `SendInput` injection (absolute mouse, relative mouse for game cameras, VK keys, Unicode text, a phone keyboard's paste as Ctrl+V once the UI thread has put it on the clipboard, a right-click menu closed before it), input-desktop following |
-| `files.cpp` | phone→PC into `Downloads\DeskLink`, PC→phone via a file picker on the PC |
+| `files.cpp` | phone→PC into `Downloads\DeskLink`, PC→phone via a file picker on the PC; a phone's backup into `Pictures\DeskLink backup\<phone>` (the phone's folders and dates; what's there already is told, a cut-off file's part is kept to go on from) |
 | `ui.cpp`, `strings.cpp` | tray menu, "Shared with …" pill, pairing window, clipboard bridge (EN/ES) |
 | `service.cpp` | Windows service + SYSTEM agent in the console session, installer/uninstaller |
 
@@ -109,8 +109,12 @@ DeskLinkHostTest.exe --data %TEMP%\dl --bind 127.0.0.1 --port 47910 --no-ui --au
 :: (only for a host started with --no-inject, which logs keys instead of typing them) a PASTE and a TEXT with a line break are sent and their keys checked
 set HOST_LOG=%TEMP%\dl\host.log
 set HOST_NO_INJECT=1
-node tools\testclient.mjs 127.0.0.1 47910 %TEMP%\work                :: 24 end-to-end protocol checks (sound and a
-                                                                     :: screenshot too, kept as shot.png in the work folder)
+node tools\testclient.mjs 127.0.0.1 47910 %TEMP%\work                :: 38 end-to-end protocol checks (sound and a
+                                                                     :: screenshot too, kept as shot.png in the work folder;
+                                                                     :: a backup on a side connection, files under %TEMP%\dl\backup;
+                                                                     :: a quiet tone plays for 4 s: the sound kept while paused)
+:: meanwhile, from android\: the phone app's backup service and session screen against that host (4 checks)
+gradlew :app:testDebugUnitTest --tests com.desklink.app.BackupAndStayLiveTest -Phost=127.0.0.1:47910 -Phostdata=%TEMP%\dl
 ```
 
 `--data` keeps test identities, logs and received files out of the real profile.

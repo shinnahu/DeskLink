@@ -67,6 +67,25 @@ final class Prefs {
 
     void setSound(boolean v) { sp.edit().putBoolean("sound", v).apply(); }
 
+    /**
+     * Stay connected while DeskLink is in the background (the phone locked, another app in front): the PC's sound
+     * plays on (PCs with DeskLink 2.12). Off by default: before 2.17 the connection always closed after a minute.
+     */
+    boolean stayConnected() { return sp.getBoolean("stayConnected", false); }
+
+    void setStayConnected(boolean v) { sp.edit().putBoolean("stayConnected", v).apply(); }
+
+    /** The last backup of the photos and videos that got to its end: when, to which PC, how many are on it. */
+    long lastBackupAt() { return sp.getLong("backupAt", 0); }
+
+    String lastBackupPc() { return sp.getString("backupPc", ""); }
+
+    int lastBackupFiles() { return sp.getInt("backupFiles", 0); }
+
+    void setLastBackup(long at, String pc, int files) {
+        sp.edit().putLong("backupAt", at).putString("backupPc", pc).putInt("backupFiles", files).apply();
+    }
+
     /** The shortcut bar's button: on = the bar is shown, keyboard open or not; off = never shown. */
     boolean showBar() { return sp.getBoolean("showBar", true); }
 

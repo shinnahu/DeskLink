@@ -93,6 +93,126 @@ static std::wstring UniquePath(const std::wstring& dir, const std::wstring& name
   return dir + L"\\" + std::to_wstring(GetTickCount64()) + L"-" + name;
 }
 
+// ---------------------------------------------------------------- backups
+static std::wstring KnownFolder(REFKNOWNFOLDERID id, HANDLE token, DWORD flags) {
+  PWSTR p = nullptr;
+  std::wstring dir;
+  if (SUCCEEDED(SHGetKnownFolderPath(id, flags, token, &p)) && p) dir = p;
+  if (p) CoTaskMemFree(p);
+  return dir;
+}
+
+static bool StartsWithI(const std::wstring& s, const std::wstring& prefix) {
+  return !prefix.empty() && s.size() >= prefix.size() && _wcsnicmp(s.c_str(), prefix.c_str(), prefix.size()) == 0;
+}
+
+// <Pictures>\DeskLink backup. Not inside OneDrive (Windows can move Pictures there): a backup of a phone would fill
+// its space and go up to the cloud, so then it's the Pictures folder in the user's own folder.
+static std::wstring BackupRootFor(HANDLE token) {
+  if (!g_opt.dataDir.empty()) return g_opt.dataDir + L"\\backup";  // tests: not in the user's Pictures
+  std::wstring pics = KnownFolder(FOLDERID_Pictures, token, KF_FLAG_CREATE);
+  std::wstring cloud = KnownFolder(FOLDERID_SkyDrive, token, KF_FLAG_DONT_VERIFY);
+  if (pics.empty() || StartsWithI(pics, cloud + L"\\")) {
+    std::wstring home = KnownFolder(FOLDERID_Profile, token, 0);
+    if (home.empty()) return L"";
+    pics = home + L"\\Pictures";
+  }
+  return pics + L"\\DeskLink backup";
+}
+
+std::wstring BackupFolderFor(HANDLE token, const std::string& deviceName) {
+  std::wstring root = BackupRootFor(token);
+  return root.empty() ? L"" : root + L"\\" + SanitizeName(deviceName.empty() ? "Phone" : deviceName);
+}
+
+// Total length of a backup file's path: within Windows' 260 characters, with room for " (2)" and its part's name.
+static constexpr size_t kBackupPathMax = 240;
+
+// The folder and name a backup file gets: the phone's folders under the phone's own one, each name made safe for
+// Windows. A path too long loses the phone's outer folders first, then the end of the file's name (not its extension).
+static bool BackupPathFor(const std::wstring& phoneDir, const std::string& folder, const std::string& rawName,
+                          std::wstring& dir, std::wstring& name) {
+  std::vector<std::wstring> parts;
+  size_t start = 0;
+  while (start < folder.size()) {
+    size_t e = folder.find('/', start);
+    if (e == std::string::npos) e = folder.size();
+    std::string seg = folder.substr(start, e - start);
+    start = e + 1;
+    if (seg.empty() || seg == "." || seg == "..") continue;
+    std::wstring w = SanitizeName(seg);
+    if (w.size() > 60) w.resize(60);
+    while (!w.empty() && (w.back() == L'.' || w.back() == L' ')) w.pop_back();
+    if (!w.empty()) parts.push_back(w);
+  }
+  while (parts.size() > 8) parts.erase(parts.begin());
+  name = SanitizeName(rawName);
+  auto join = [&] {
+    std::wstring d = phoneDir;
+    for (auto& p : parts) d += L"\\" + p;
+    return d;
+  };
+  dir = join();
+  while (!parts.empty() && dir.size() + 1 + name.size() > kBackupPathMax) {
+    parts.erase(parts.begin());
+    dir = join();
+  }
+  if (dir.size() + 1 + name.size() > kBackupPathMax) {
+    size_t room = kBackupPathMax > dir.size() + 1 ? kBackupPathMax - dir.size() - 1 : 0;
+    size_t dot = name.rfind(L'.');
+    std::wstring ext = dot != std::wstring::npos && name.size() - dot <= 12 ? name.substr(dot) : L"";
+    if (room < ext.size() + 8) return false;
+    name = name.substr(0, room - ext.size()) + ext;
+  }
+  return true;
+}
+
+// A backup file's part, while it comes (and after, if the connection dropped): hidden, next to where the file goes,
+// named after the file's name and size, so the next backup of that same file finds it.
+static std::wstring PartPath(const std::wstring& dir, const std::wstring& name, uint64_t size) {
+  uint64_t h = 1469598103934665603ull;  // FNV-1a
+  std::string key = W2U(name) + '\0' + std::to_string(size);
+  for (unsigned char c : key) {
+    h ^= c;
+    h *= 1099511628211ull;
+  }
+  wchar_t buf[40];
+  swprintf(buf, 40, L"\\.dl-%016llx.part", (unsigned long long)h);
+  return dir + buf;
+}
+
+static bool SizeOf(const std::wstring& path, uint64_t& size) {
+  WIN32_FILE_ATTRIBUTE_DATA a{};
+  if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a) || (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+    return false;
+  size = (uint64_t)a.nFileSizeHigh << 32 | a.nFileSizeLow;
+  return true;
+}
+
+// The file is here already: under its name, or one of the "name (2).jpg" that another file of that name got.
+static bool HaveBackupFile(const std::wstring& dir, const std::wstring& name, uint64_t size) {
+  uint64_t s = 0;
+  std::wstring p = dir + L"\\" + name;
+  if (!SizeOf(p, s)) return false;
+  if (s == size) return true;
+  size_t dot = name.rfind(L'.');
+  std::wstring stem = dot == std::wstring::npos || dot == 0 ? name : name.substr(0, dot);
+  std::wstring ext = dot == std::wstring::npos || dot == 0 ? L"" : name.substr(dot);
+  for (int i = 1; i < 100; i++) {
+    if (!SizeOf(dir + L"\\" + stem + L" (" + std::to_wstring(i) + L")" + ext, s)) return false;
+    if (s == size) return true;
+  }
+  return false;
+}
+
+static FILETIME FileTimeFromUnixMs(uint64_t ms) {
+  uint64_t t = ms * 10000ull + 116444736000000000ull;
+  FILETIME ft;
+  ft.dwLowDateTime = (DWORD)t;
+  ft.dwHighDateTime = (DWORD)(t >> 32);
+  return ft;
+}
+
 static std::string MimeFor(const std::wstring& path) {
   const wchar_t* ext = PathFindExtensionW(path.c_str());
   if (!ext || !*ext) return "application/octet-stream";
@@ -109,7 +229,8 @@ void FileReceiver::CancelAll() {
   UserContext uc;
   for (auto& kv : in_) {
     if (kv.second.h != INVALID_HANDLE_VALUE) CloseHandle(kv.second.h);
-    if (!kv.second.tmp.empty()) DeleteFileW(kv.second.tmp.c_str());
+    // a backup file's part stays: the next backup goes on from it
+    if (!kv.second.tmp.empty() && !kv.second.backup) DeleteFileW(kv.second.tmp.c_str());
   }
   in_.clear();
 }
@@ -131,7 +252,8 @@ void FileReceiver::Fail(uint32_t id, const std::string& why) {
   Log("files: incoming %u failed: %s", id, why.c_str());
 }
 
-void FileReceiver::OnBegin(uint32_t id, uint64_t size, const std::string& name, const std::string& mime) {
+void FileReceiver::OnBegin(uint32_t id, uint64_t size, const std::string& name, const std::string& mime,
+                           const BackupFile* backup) {
   (void)mime;
   if (in_.count(id)) {
     Fail(id, "duplicate transfer id");
@@ -140,6 +262,58 @@ void FileReceiver::OnBegin(uint32_t id, uint64_t size, const std::string& name, 
   UserContext uc;
   if (!uc.ok()) {
     Fail(id, "Nobody is signed in on the PC.");
+    return;
+  }
+  if (backup) {
+    std::wstring phoneDir = BackupFolderFor(uc.token(), device_);
+    In f;
+    if (phoneDir.empty() || !BackupPathFor(phoneDir, backup->folder, name, f.dir, f.name)) {
+      Fail(id, "The backup folder is not available.");
+      return;
+    }
+    if (backup->offset > size) {
+      Fail(id, "The file is shorter than where it should go on from.");
+      return;
+    }
+    int made = SHCreateDirectoryExW(nullptr, f.dir.c_str(), nullptr);
+    if (made != ERROR_SUCCESS && made != ERROR_ALREADY_EXISTS && made != ERROR_FILE_EXISTS) {
+      Fail(id, "Could not make the backup folder on the PC.");
+      return;
+    }
+    ULARGE_INTEGER freeBytes{};
+    if (GetDiskFreeSpaceExW(f.dir.c_str(), &freeBytes, nullptr, nullptr) &&
+        freeBytes.QuadPart < size - backup->offset + 64ull * 1024 * 1024) {
+      Fail(id, "Not enough free disk space on the PC.");
+      return;
+    }
+    f.tmp = PartPath(f.dir, f.name, size);
+    f.size = size;
+    f.backup = true;
+    f.modifiedMs = backup->modifiedMs;
+    if (backup->offset > 0) {  // the part from before: it must be as long as the phone was told
+      f.h = CreateFileW(f.tmp.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+      LARGE_INTEGER len{};
+      if (f.h == INVALID_HANDLE_VALUE || !GetFileSizeEx(f.h, &len) || (uint64_t)len.QuadPart != backup->offset) {
+        if (f.h != INVALID_HANDLE_VALUE) CloseHandle(f.h);
+        DeleteFileW(f.tmp.c_str());
+        Fail(id, "The part on the PC changed: it starts again.");
+        return;
+      }
+      LARGE_INTEGER end{};
+      SetFilePointerEx(f.h, end, nullptr, FILE_END);
+    } else {
+      f.h = CreateFileW(f.tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                        FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+      if (f.h == INVALID_HANDLE_VALUE) {
+        Fail(id, "Could not create the file on the PC.");
+        return;
+      }
+    }
+    f.got = f.lastAck = backup->offset;
+    in_[id] = f;
+    if (backup->offset > 0)
+      Log("files: backup '%s' goes on at %llu of %llu bytes", W2U(f.name).c_str(), (unsigned long long)backup->offset,
+          (unsigned long long)size);
     return;
   }
   std::wstring dir = ReceivedFilesDirFor(uc.token());
@@ -203,6 +377,10 @@ void FileReceiver::OnEnd(uint32_t id) {
   bool ok = false;
   {
     UserContext uc;
+    if (f.backup && f.modifiedMs && f.got == f.size) {  // the phone's date (written last: writing would change it)
+      FILETIME ft = FileTimeFromUnixMs(f.modifiedMs);
+      SetFileTime(f.h, &ft, nullptr, &ft);
+    }
     CloseHandle(f.h);
     if (f.got == f.size) {
       finalPath = UniquePath(f.dir, f.name);
@@ -218,8 +396,8 @@ void FileReceiver::OnEnd(uint32_t id) {
   d.u32(id).u8(ok ? 0 : 1).str(ok ? W2U(finalPath) : (f.got != f.size ? "Transfer incomplete." : "Could not save the file."));
   s_->SendControl(std::move(d.b));
   if (ok) {
-    Log("files: saved %s", W2U(finalPath).c_str());
-    ui::FileReceived(finalPath);
+    Log("files: %s %s", f.backup ? "backed up" : "saved", W2U(finalPath).c_str());
+    if (!f.backup) ui::FileReceived(finalPath);  // (a backup says so once, at its end)
   }
 }
 
@@ -228,11 +406,46 @@ void FileReceiver::OnCancel(uint32_t id) {
   if (it == in_.end()) return;
   UserContext uc;
   CloseHandle(it->second.h);
-  DeleteFileW(it->second.tmp.c_str());
+  if (!it->second.backup) DeleteFileW(it->second.tmp.c_str());  // (a backup that's stopped goes on from its part)
   in_.erase(it);
   Writer d(msg::FILE_DONE);
   d.u32(id).u8(2).str("Cancelled");
   s_->SendControl(std::move(d.b));
+}
+
+std::vector<uint64_t> FileReceiver::Check(const std::vector<BackupEntry>& entries) {
+  std::vector<uint64_t> have(entries.size(), 0);
+  UserContext uc;
+  if (!uc.ok()) return have;
+  std::wstring phoneDir = BackupFolderFor(uc.token(), device_);
+  if (phoneDir.empty()) return have;
+  for (size_t i = 0; i < entries.size(); i++) {
+    const BackupEntry& e = entries[i];
+    std::wstring dir, name;
+    if (!BackupPathFor(phoneDir, e.folder, e.name, dir, name)) continue;
+    if (HaveBackupFile(dir, name, e.size)) {
+      have[i] = e.size;
+      continue;
+    }
+    uint64_t part = 0;
+    std::wstring tmp = PartPath(dir, name, e.size);
+    if (!SizeOf(tmp, part)) continue;
+    // a part that's complete (the connection dropped as it ended) or longer starts again, to be sure of it
+    if (part < e.size) have[i] = part;
+    else DeleteFileW(tmp.c_str());
+  }
+  return have;
+}
+
+void FileReceiver::BackupEnded(uint32_t files, uint64_t bytes, uint32_t failed) {
+  std::wstring dir;
+  {
+    UserContext uc;
+    if (uc.ok()) dir = BackupFolderFor(uc.token(), device_);
+  }
+  Log("files: backup from %s over: %u files (%llu bytes) this time, %u not sent", device_.c_str(), files,
+      (unsigned long long)bytes, failed);
+  if (files > 0 && !dir.empty()) ui::BackupFinished(dir, U2W(device_), files);
 }
 
 // ---------------------------------------------------------------- sending (PC -> phone)

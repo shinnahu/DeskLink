@@ -51,6 +51,12 @@ public final class Protocol {
     public static final int FILE_DONE = 0x45;
     public static final int FILE_REQUEST = 0x46;
     public static final int FILE_REQUEST_NONE = 0x47;
+    /** Backup (CAP_BACKUP, side connection): u32 req u16 n, n × (str folder str name u64 size). */
+    public static final int BACKUP_CHECK = 0x48;
+    /** The PC's answer: u32 req u16 n, n × u64 have (the size: it's there; less: a part to go on from; 0: nothing). */
+    public static final int BACKUP_STATE = 0x49;
+    /** The backup is over: u32 files u64 bytes u32 failed (one notice on the PC for all of it). */
+    public static final int BACKUP_END = 0x4A;
     public static final int PING = 0x50;
     public static final int PONG = 0x51;
     public static final int NOTICE = 0x52;
@@ -103,6 +109,18 @@ public final class Protocol {
     public static final int CAP_SCREENSHOT = 256;
     /** The PC pastes text (PASTE): with clipboard sync on, from its clipboard with Ctrl+V; otherwise typed; host 2.10+. */
     public static final int CAP_PASTE = 512;
+    /** STREAM_PAUSE may keep the PC's sound (PAUSE_KEEP_SOUND); host 2.12+. */
+    public static final int CAP_SOUND_PAUSED = 1024;
+    /** Backups: side connections (AUTH_SIDE), BACKUP_CHECK / BACKUP_END, files of kind FILE_KIND_BACKUP; host 2.12+. */
+    public static final int CAP_BACKUP = 2048;
+
+    // ---- AUTH's optional last byte
+    /** A side connection, for a backup: it doesn't replace the remote session (nor is it replaced by it). */
+    public static final int AUTH_SIDE = 1;
+
+    // ---- STREAM_PAUSE's optional byte (CAP_SOUND_PAUSED)
+    /** The picture stops, the PC's sound goes on (the phone is locked, playing it). */
+    public static final int PAUSE_KEEP_SOUND = 1;
 
     // ---- HOST_INFO mobile-data flags (what reaches the PC away from home)
     public static final int REMOTE_IPV4 = 1;          // the router forwards the port
@@ -145,6 +163,10 @@ public final class Protocol {
     // ---- FILE_BEGIN's last byte: what the file is (a file without it is a plain file)
     public static final int FILE_KIND_FILE = 0;
     public static final int FILE_KIND_SCREENSHOT = 1;
+    /** Phone → PC, a file of a backup: then str folder, u64 modifiedMs, u64 offset (the data starts there). */
+    public static final int FILE_KIND_BACKUP = 2;
+    /** At most this many files in one BACKUP_CHECK. */
+    public static final int BACKUP_CHECK_MAX = 200;
 
     // ---- SCREENSHOT_FAILED reasons
     /** Nothing to take right now: no picture yet, the PC locked, no screen on. */

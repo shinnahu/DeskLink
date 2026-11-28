@@ -113,7 +113,7 @@
     <string name="menu_predictive">Predictive text</string>
     <string name="menu_stats">Show stats</string>
     <string name="menu_help">Gestures</string>
-    <string name="help_text">Trackpad mode\n• Drag one finger: move the pointer\n• Let go while moving: the pointer glides on (touch to stop it)\n• Tap: click · Double tap: double-click\n• Tap with two fingers: right-click\n• Tap with three fingers: middle-click\n• Swipe with two fingers: scroll (let go while moving and it keeps scrolling; touch to stop it)\n• Touch and hold, then drag: drag (or double-tap and drag). A ring at the pointer shows when the hold takes. To go further, put another finger down and lift the first\n• Pinch: zoom\n• Swipe up / down with three fingers: show / hide the keyboard\n\nDirect touch mode\n• Tap: click where you touch\n• Touch and hold: right-click\n• Drag one finger: drag\n• Two fingers: scroll · Pinch: zoom\n\nShortcut bar (above the keyboard)\n• Edit, Ctrl Alt, Esc Tab, ← ↑ ↓ →: tap to show those keys, tap again to hide them\n• Ctrl, Shift, Alt: tap = stays pressed until you tap it again; touch and hold = pressed while held (Settings → Keyboard can make them work only while held)\n• Win: a tap is a press (it opens Start); touch and hold = pressed while held (Win + a key)\n\nButtons at the bottom right\n• Keyboard: show / hide the phone keyboard\n• Shortcut keys: keep the shortcut bar on screen (tap again to hide it)\n\nTop bar\n• It stays until you hide it with ˄; the ˅ at the top brings it back\n• The mode button switches trackpad → direct touch → Gaming mode; touch and hold it to pick one, or a gaming profile\n• With more than one screen on the PC: the two-screens button shows them all at once (pinch to look closer; tap it again for one screen), the screen-with-an-arrow button goes to the next one\n• ⋮: send files to the PC or get one from it, send the phone\'s clipboard, pick a screen, Ctrl+Alt+Del, lock the PC, Task Manager\n\nGaming mode\n• An on-screen gamepad: holding a button holds its key or mouse button on the PC\n• The stick (DualShock) steers smoothly; Settings → Pad type → Digital gives the D-pad instead\n• Drag between the buttons to move the pointer; in a game that hides the pointer, it turns the camera\n• Each profile has its own name and buttons: Settings → Profiles…\n\nSettings (⋮ → Settings): pointer speed, keyboard, Gaming mode, picture, clipboard</string>
+    <string name="help_text">Trackpad mode\n• Drag one finger: move the pointer\n• Let go while moving: the pointer glides on (touch to stop it)\n• Tap: click · Double tap: double-click\n• Tap with two fingers: right-click\n• Tap with three fingers: middle-click\n• Swipe with two fingers: scroll (let go while moving and it keeps scrolling; touch to stop it)\n• Touch and hold, then drag: drag (or double-tap and drag). A ring at the pointer shows when the hold takes. To go further, put another finger down and lift the first\n• Pinch: zoom\n• Swipe up / down with three fingers: show / hide the keyboard\n\nDirect touch mode\n• Tap: click where you touch\n• Touch and hold: right-click\n• Drag one finger: drag\n• Two fingers: scroll · Pinch: zoom\n\nShortcut bar (above the keyboard)\n• Edit, Ctrl Alt, Esc Tab, ← ↑ ↓ →: tap to show those keys, tap again to hide them\n• Ctrl, Shift, Alt: tap = stays pressed until you tap it again; touch and hold = pressed while held (Settings → Keyboard can make them work only while held)\n• Win: a tap is a press (it opens Start); touch and hold = pressed while held (Win + a key)\n\nButtons at the bottom right\n• Keyboard: show / hide the phone keyboard\n• Shortcut keys: keep the shortcut bar on screen (tap again to hide it)\n\nTop bar\n• It stays until you hide it with ˄; the ˅ at the top brings it back\n• The mode button switches trackpad → direct touch → Gaming mode; touch and hold it to pick one, or a gaming profile\n• With more than one screen on the PC: the two-screens button shows them all at once (pinch to look closer; tap it again for one screen), the screen-with-an-arrow button goes to the next one\n• ⋮: send files to the PC or get one from it, send the phone\'s clipboard, pick a screen, Ctrl+Alt+Del, lock the PC, Task Manager\n\nGaming mode\n• An on-screen gamepad: holding a button holds its key or mouse button on the PC\n• The stick (DualShock) steers smoothly; Settings → Pad type → Digital gives the D-pad instead\n• Drag between the buttons to move the pointer; in a game that hides the pointer, it turns the camera\n• Each profile has its own name and buttons: Settings → Profiles…\n\nSettings (⋮ → Settings): pointer speed, keyboard, Gaming mode, picture, sound, staying connected in the background, clipboard, backing up photos and videos</string>
 
     <string name="tb_keyboard">Keyboard</string>
     <string name="tb_keyboard_hide">Hide keyboard</string>
@@ -211,6 +211,7 @@
     <string name="files_received">Saved to Downloads/DeskLink: %1$s</string>
     <string name="files_received_app">Saved to %1$s</string>
     <string name="files_receive_failed">Could not receive %1$s</string>
+    <string name="files_no_app">No app on this phone opens %1$s</string>
     <string name="files_pick_on_pc">Choose the file on the PC screen…</string>
     <string name="files_none_chosen">No file was chosen on the PC</string>
     <string name="files_not_connected">Not connected</string>
@@ -316,4 +317,45 @@
     <string name="set_arrow_color_sum">The stick\'s arrows, and the D-pad\'s arms while held.</string>
     <string name="set_color_n">Color %1$d</string>
     <string name="set_percent" translatable="false">%1$d %%</string>
+
+    <!-- Stay connected (2.17) -->
+    <string name="set_connection">Connection</string>
+    <string name="set_stay">Stay connected in the background</string>
+    <string name="set_stay_sum">The PC\'s sound keeps playing with the phone locked or in another app. Needs DeskLink 2.12 on the PC.</string>
+    <string name="note_channel_connection">Connection</string>
+    <string name="note_connected">Connected to %1$s</string>
+
+    <!-- Backup (2.17) -->
+    <string name="set_backup">Backup</string>
+    <string name="set_backup_row">Back up photos and videos</string>
+    <string name="set_backup_sum">To the PC, in Pictures › DeskLink backup. Only over Wi-Fi.</string>
+    <string name="set_backup_last">Last time: %1$s, %2$s on %3$s</string>
+    <string name="backup_choose_pc">Back up to which PC?</string>
+    <string name="backup_no_access">DeskLink can\'t see the photos and videos</string>
+    <string name="backup_allow">Allow</string>
+    <string name="backup_to">Backing up to %1$s</string>
+    <string name="backup_looking">Looking for the photos and videos…</string>
+    <string name="backup_connecting">Connecting to %1$s…</string>
+    <string name="backup_checking">Checking what %1$s has already…</string>
+    <string name="backup_progress">%1$s of %2$s · %3$s of %4$s</string>
+    <string name="backup_waiting_wifi">Waiting for Wi-Fi</string>
+    <string name="backup_waiting_pc">Waiting for %1$s…</string>
+    <string name="backup_stop">Stop</string>
+    <string name="backup_continue">Continue</string>
+    <string name="backup_done">Backup done</string>
+    <plurals name="backup_done_files">
+        <item quantity="one">%1$s photo or video on %2$s</item>
+        <item quantity="other">%1$s photos and videos on %2$s</item>
+    </plurals>
+    <plurals name="backup_left_out">
+        <item quantity="one">%1$s couldn\'t be read</item>
+        <item quantity="other">%1$s couldn\'t be read</item>
+    </plurals>
+    <string name="backup_stopped">Backup stopped</string>
+    <string name="backup_stopped_at">%1$s of %2$s are on the PC</string>
+    <string name="backup_no_wifi">No Wi-Fi for 2 hours</string>
+    <string name="backup_old_pc">%1$s needs DeskLink 2.12 or later</string>
+    <string name="backup_refused">%1$s didn\'t take the files</string>
+    <string name="backup_sd_card">SD card</string>
+    <string name="note_channel_backup">Backup</string>
 </resources>
